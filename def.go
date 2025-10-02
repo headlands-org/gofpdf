@@ -702,7 +702,7 @@ type fontDefType struct {
 	Desc         FontDescType  // Font descriptor
 	Up           int           // Underline position
 	Ut           int           // Underline thickness
-	Cw           []int         // Character width by ordinal
+	Cw           map[int]int   // Character width by ordinal
 	Enc          string        // "cp1252", ...
 	Diff         string        // Differences from reference encoding
 	File         string        // "Redressed.z"
@@ -713,6 +713,46 @@ type fontDefType struct {
 	i            string        // 1-based position in font list, set by font loader, not this program
 	utf8File     *utf8FontFile // UTF-8 font
 	usedRunes    map[int]int   // Array of used runes
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for fontDefType
+// to handle Cw field which can be either an array or map in JSON
+func (fdt *fontDefType) UnmarshalJSON(data []byte) error {
+	// Create a temporary type with the same fields but Cw as interface{}
+	type Alias fontDefType
+	aux := &struct {
+		Cw interface{} `json:"Cw"`
+		*Alias
+	}{
+		Alias: (*Alias)(fdt),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// Convert Cw to map[int]int
+	fdt.Cw = make(map[int]int)
+	switch v := aux.Cw.(type) {
+	case []interface{}:
+		// Array format from JSON files
+		for i, val := range v {
+			if fval, ok := val.(float64); ok {
+				fdt.Cw[i] = int(fval)
+			}
+		}
+	case map[string]interface{}:
+		// Map format (if already a map in JSON)
+		for k, val := range v {
+			if fval, ok := val.(float64); ok {
+				var key int
+				fmt.Sscanf(k, "%d", &key)
+				fdt.Cw[key] = int(fval)
+			}
+		}
+	}
+
+	return nil
 }
 
 // generateFontID generates a font Id from the font definition
