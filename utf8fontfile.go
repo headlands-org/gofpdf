@@ -449,22 +449,29 @@ func (utf *utf8FontFile) parseCMAPTable(format int) int {
 	utf.skip(2)
 	cmapTableCount := utf.readUint16()
 	cidCMAPPosition := 0
+	format12Position := 0
 	for i := 0; i < cmapTableCount; i++ {
 		system := utf.readUint16()
 		coded := utf.readUint16()
 		position := utf.readUint32()
 		oldReaderPosition := utf.fileReader.readerPosition
-		// Accept both Format 4 (BMP, encoding ID 1) and Format 12 (full Unicode, encoding ID 10)
+		// Prioritize Format 12 (full Unicode) over Format 4 (BMP only)
 		if (system == 3 && (coded == 1 || coded == 10)) || system == 0 { // Microsoft, Unicode
 			format = utf.getUint16(cmapPosition + position)
-			if format == 4 || format == 12 {
-				if cidCMAPPosition == 0 {
-					cidCMAPPosition = cmapPosition + position
-				}
+			if format == 12 {
+				// Format 12 found - use it and stop searching
+				format12Position = cmapPosition + position
 				break
+			} else if format == 4 && cidCMAPPosition == 0 {
+				// Format 4 found - save as fallback but keep searching for Format 12
+				cidCMAPPosition = cmapPosition + position
 			}
 		}
 		utf.seek(int(oldReaderPosition))
+	}
+	// Use Format 12 if found, otherwise use Format 4
+	if format12Position != 0 {
+		return format12Position
 	}
 	if cidCMAPPosition == 0 {
 		fmt.Printf("Font does not have cmap for Unicode\n")
@@ -498,22 +505,31 @@ func (utf *utf8FontFile) generateCMAP() map[int][]int {
 	utf.skip(2)
 	cmapTableCount := utf.readUint16()
 	runeCmapPosition := 0
+	format12Position := 0
 	for i := 0; i < cmapTableCount; i++ {
 		system := utf.readUint16()
 		coder := utf.readUint16()
 		position := utf.readUint32()
 		oldPosition := utf.fileReader.readerPosition
-		// Accept both Format 4 (BMP, encoding ID 1) and Format 12 (full Unicode, encoding ID 10)
+		// Prioritize Format 12 (full Unicode) over Format 4 (BMP only)
 		if (system == 3 && (coder == 1 || coder == 10)) || system == 0 {
 			format := utf.getUint16(cmapPosition + position)
-			if format == 4 || format == 12 {
-				runeCmapPosition = cmapPosition + position
+			if format == 12 {
+				// Format 12 found - use it and stop searching
+				format12Position = cmapPosition + position
 				break
+			} else if format == 4 && runeCmapPosition == 0 {
+				// Format 4 found - save as fallback but keep searching for Format 12
+				runeCmapPosition = cmapPosition + position
 			}
 		}
 		utf.seek(int(oldPosition))
 	}
 
+	// Use Format 12 if found, otherwise use Format 4
+	if format12Position != 0 {
+		runeCmapPosition = format12Position
+	}
 	if runeCmapPosition == 0 {
 		fmt.Printf("Font does not have cmap for Unicode\n")
 		return nil
@@ -635,8 +651,12 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 
 	cidSymbolPairCollection, symbolArray, symbolCollection, symbolCollectionKeys := utf.parseSymbols(usedRunes)
 
-	// Generate dynamic ToUnicode CMap based on the actual used runes
-	utf.ToUnicodeCMap = generateToUnicodeCMap(usedRunes)
+	// Generate dynamic ToUnicode CMap: invert cidSymbolPairCollection to get CID->Unicode mapping
+	cidToUnicode := make(map[int]int)
+	for unicode, cid := range cidSymbolPairCollection {
+		cidToUnicode[cid] = unicode
+	}
+	utf.ToUnicodeCMap = generateToUnicodeCMap(cidToUnicode)
 
 	metricsCount = len(symbolCollection)
 	numSymbols = metricsCount
