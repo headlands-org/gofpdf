@@ -121,6 +121,23 @@ func utf8toutf16(s string, withBOM ...bool) string {
 		c1 := byte(s[i])
 		i++
 		switch {
+		case c1 >= 240:
+			// 4-byte character (U+10000 to U+10FFFF)
+			// Format: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+			c2 := byte(s[i])
+			i++
+			c3 := byte(s[i])
+			i++
+			c4 := byte(s[i])
+			i++
+			// Decode UTF-8 to Unicode codepoint
+			codepoint := (uint32(c1&0x07) << 18) | (uint32(c2&0x3F) << 12) | (uint32(c3&0x3F) << 6) | uint32(c4&0x3F)
+			// Generate UTF-16 surrogate pair
+			codepoint -= 0x10000
+			highSurrogate := 0xD800 + ((codepoint >> 10) & 0x3FF)
+			lowSurrogate := 0xDC00 + (codepoint & 0x3FF)
+			res = append(res, byte(highSurrogate>>8), byte(highSurrogate&0xFF),
+				byte(lowSurrogate>>8), byte(lowSurrogate&0xFF))
 		case c1 >= 224:
 			// 3-byte character
 			c2 := byte(s[i])

@@ -51,7 +51,7 @@ type utf8FontFile struct {
 	Flags                int
 	UnderlinePosition    float64
 	UnderlineThickness   float64
-	CharWidths           []int
+	CharWidths           map[int]int
 	DefaultWidth         float64
 	symbolData           map[int]map[string][]int
 	CodeSymbolDictionary map[int]int
@@ -574,6 +574,11 @@ func (utf *utf8FontFile) generateCMAPTable(cidSymbolPairCollection map[int]int, 
 	prevCid := -2
 	prevSymbol := -1
 	for _, cid := range cidSymbolPairCollectionKeys {
+		// CMAP format 4 is limited to BMP (U+0000 to U+FFFF)
+		// Skip codepoints beyond U+FFFF as they cannot be represented in format 4
+		if cid > 0xFFFF {
+			continue
+		}
 		if cid == (prevCid+1) && cidSymbolPairCollection[cid] == (prevSymbol+1) {
 			if n, OK := cidArray[cidID]; !OK || n == nil {
 				cidArray[cidID] = make([]int, 0)
@@ -836,7 +841,7 @@ func (utf *utf8FontFile) parseHMTXTable(numberOfHMetrics, numSymbols int, symbol
 	start := utf.SeekTable("hmtx")
 	arrayWidths := 0
 	var arr []int
-	utf.CharWidths = make([]int, 256*256)
+	utf.CharWidths = make(map[int]int)
 	charCount := 0
 	arr = unpackUint16Array(utf.getRange(start, numberOfHMetrics*4))
 	for symbol := 0; symbol < numberOfHMetrics; symbol++ {
@@ -856,10 +861,8 @@ func (utf *utf8FontFile) parseHMTXTable(numberOfHMetrics, numSymbols int, symbol
 					if widths == 0 {
 						widths = 65535
 					}
-					if char < 196608 {
-						utf.CharWidths[char] = widths
-						charCount++
-					}
+					utf.CharWidths[char] = widths
+					charCount++
 				}
 			}
 		}
@@ -874,10 +877,8 @@ func (utf *utf8FontFile) parseHMTXTable(numberOfHMetrics, numSymbols int, symbol
 					if widths == 0 {
 						widths = 65535
 					}
-					if char < 196608 {
-						utf.CharWidths[char] = widths
-						charCount++
-					}
+					utf.CharWidths[char] = widths
+					charCount++
 				}
 			}
 		}
@@ -967,9 +968,7 @@ func (utf *utf8FontFile) generateSCCSDictionaries(runeCmapPosition int, symbolCh
 				}
 			}
 			charSymbolDictionary[char] = symbol
-			if char < 196608 {
-				maxRune = max(char, maxRune)
-			}
+			maxRune = max(char, maxRune)
 			symbolCharDictionary[symbol] = append(symbolCharDictionary[symbol], char)
 		}
 	}
