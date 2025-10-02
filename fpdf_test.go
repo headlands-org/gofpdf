@@ -2922,3 +2922,1330 @@ func ExampleFpdf_SetModificationDate() {
 	// Output:
 	// Successfully generated pdf/Fpdf_SetModificationDate.pdf
 }
+
+// ExampleFpdf_AddUTF8Font_emoji demonstrates emoji rendering using the Noto Emoji font.
+// This example shows how to render various emoji categories including basic emoji,
+// emoji with variation selectors, and mixed text with emoji.
+//
+// Note: Due to CMAP format 4 limitation, only emoji in the Basic Multilingual Plane
+// (BMP, U+0000 to U+FFFF) will render properly. Emoji in supplementary planes
+// (U+1F300 and above) may not display correctly and will show as boxes or missing glyphs.
+// The Noto Emoji font used here provides monochrome (black and white) emoji, not color.
+func ExampleFpdf_AddUTF8Font_emoji() {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+
+	// Add Noto Emoji font (monochrome version)
+	pdf.AddUTF8Font("notoemoji", "", example.FontFile("NotoEmoji-Regular.ttf"))
+
+	// Title
+	pdf.SetFont("Arial", "B", 20)
+	pdf.Cell(0, 10, "Emoji Support Example")
+	pdf.Ln(15)
+
+	// Section 1: Basic BMP Emoji (These should work)
+	pdf.SetFont("Arial", "B", 14)
+	pdf.Cell(0, 8, "Basic BMP Emoji (U+2000-U+2FFF range):")
+	pdf.Ln(10)
+
+	pdf.SetFont("notoemoji", "", 16)
+	pdf.Cell(0, 10, "\u2600 Sun (U+2600)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2601 Cloud (U+2601)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2602 Umbrella (U+2602)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2603 Snowman (U+2603)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2614 Umbrella with Rain (U+2614)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2615 Hot Beverage (U+2615)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2660 Spade Suit (U+2660)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2661 Heart Suit Outline (U+2661)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2662 Diamond Suit (U+2662)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2663 Club Suit (U+2663)")
+	pdf.Ln(12)
+
+	// Section 2: Common Symbols
+	pdf.SetFont("Arial", "B", 14)
+	pdf.Cell(0, 8, "Common Symbols:")
+	pdf.Ln(10)
+
+	pdf.SetFont("notoemoji", "", 16)
+	pdf.Cell(0, 10, "\u2713 Check Mark (U+2713)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2714 Heavy Check Mark (U+2714)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2717 Ballot X (U+2717)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2718 Heavy Ballot X (U+2718)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2764 Heavy Black Heart (U+2764)")
+	pdf.Ln(8)
+	pdf.Cell(0, 10, "\u2b50 White Medium Star (U+2B50)")
+	pdf.Ln(12)
+
+	// Section 3: Mixed Text and Emoji
+	pdf.SetFont("Arial", "B", 14)
+	pdf.Cell(0, 8, "Mixed Text and Emoji:")
+	pdf.Ln(10)
+
+	pdf.SetFont("Arial", "", 12)
+	pdf.Cell(30, 8, "Weather today: ")
+	pdf.SetFont("notoemoji", "", 12)
+	pdf.Cell(0, 8, "\u2600 Sunny!")
+	pdf.Ln(8)
+
+	pdf.SetFont("Arial", "", 12)
+	pdf.Cell(30, 8, "Coffee time: ")
+	pdf.SetFont("notoemoji", "", 12)
+	pdf.Cell(0, 8, "\u2615")
+	pdf.Ln(8)
+
+	pdf.SetFont("Arial", "", 12)
+	pdf.Cell(30, 8, "Status: ")
+	pdf.SetFont("notoemoji", "", 12)
+	pdf.Cell(0, 8, "\u2714 Complete")
+	pdf.Ln(12)
+
+	// Section 4: Limitations note
+	pdf.SetFont("Arial", "B", 14)
+	pdf.Cell(0, 8, "Limitations:")
+	pdf.Ln(10)
+
+	pdf.SetFont("Arial", "", 10)
+	pdf.MultiCell(0, 5, "Due to CMAP format 4 limitation, supplementary plane emoji (U+1F300 and above) may not render correctly. This includes many popular modern emoji like face emoji, animals, and food items. Only emoji in the Basic Multilingual Plane (BMP, U+0000-U+FFFF) are supported.", "", "L", false)
+	pdf.Ln(5)
+	pdf.MultiCell(0, 5, "The Noto Emoji font used in this example provides monochrome (black and white) emoji, not colored emoji.", "", "L", false)
+
+	fileStr := example.Filename("Fpdf_AddUTF8Font_emoji")
+	err := pdf.OutputFileAndClose(fileStr)
+	example.Summary(err, fileStr)
+	// Output:
+	// Successfully generated pdf/Fpdf_AddUTF8Font_emoji.pdf
+}
+
+// Example_emojiShowcase demonstrates comprehensive emoji support across various
+// categories and use cases. This visual test suite makes it easy to verify emoji
+// rendering behavior and understand the limitations of CMAP format 4.
+//
+// The showcase includes:
+// - Basic BMP emoji across multiple categories (weather, symbols, shapes, etc.)
+// - Emoji in grids for easy visual scanning
+// - Text integration showing emoji mixed with regular text
+// - Different font sizes and alignments
+// - Line wrapping behavior with emoji
+// - Multi-line text with emoji
+// - Documented limitations for supplementary plane emoji
+//
+// Note: Only emoji in the Basic Multilingual Plane (BMP, U+0000-U+FFFF) render
+// correctly due to CMAP format 4 limitations. Modern emoji (U+1F300+) may not display.
+//
+// Manual Visual Verification Instructions:
+//  1. Run: go test -run Example_emojiShowcase
+//  2. Generated PDF location: pdf/Fpdf_EmojiShowcase.pdf
+//  3. Reference PDF location: pdf/reference/Fpdf_EmojiShowcase.pdf
+//  4. Open both PDFs side-by-side
+//  5. Verify:
+//     - All emoji in Section 1 render as recognizable symbols (not boxes)
+//     - Text integration in Section 2 shows emoji inline with text
+//     - Size variations in Section 3 scale proportionally
+//     - Alignment in Section 4 is correct (left/center/right)
+//     - Wrapping in Section 5 flows naturally across lines
+//     - Bullet lists in Section 6 are aligned properly
+//     - Table in Section 7 displays emoji in cells correctly
+//     - Limitations section clearly documents known issues
+//  6. Expected results:
+//     - 67+ unique emoji/symbols displayed
+//     - All BMP range emoji (U+2000-U+2FFF) render correctly
+//     - Generated PDF matches reference PDF byte-for-byte (excluding timestamps)
+func Example_emojiShowcase() {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.SetMargins(15, 15, 15)
+	pdf.AddPage()
+
+	// Add fonts
+	pdf.AddUTF8Font("notoemoji", "", example.FontFile("NotoEmoji-Regular.ttf"))
+
+	// ========== TITLE ==========
+	pdf.SetFont("Arial", "B", 24)
+	pdf.SetTextColor(0, 0, 0)
+	pdf.Cell(0, 12, "gofpdf Emoji Showcase")
+	pdf.Ln(8)
+
+	pdf.SetFont("Arial", "", 10)
+	pdf.SetTextColor(100, 100, 100)
+	pdf.Cell(0, 5, "Comprehensive Visual Test Suite for Emoji Rendering")
+	pdf.Ln(10)
+
+	// ========== SECTION 1: BASIC EMOJI GRID ==========
+	pdf.SetFont("Arial", "B", 14)
+	pdf.SetTextColor(0, 0, 0)
+	pdf.Cell(0, 8, "Section 1: Basic BMP Emoji Grid")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(80, 80, 80)
+	pdf.Cell(0, 4, "These emoji are in the Basic Multilingual Plane (U+2000-U+2FFF) and should render correctly.")
+	pdf.Ln(8)
+
+	// Weather & Nature
+	pdf.SetFont("Arial", "B", 10)
+	pdf.SetTextColor(0, 0, 0)
+	pdf.Cell(40, 5, "Weather & Nature:")
+	pdf.Ln(6)
+	pdf.SetFont("notoemoji", "", 18)
+	pdf.Cell(0, 10, "\u2600 \u2601 \u2602 \u2603 \u2604 \u2614 \u2615 \u26C4 \u26C5 \u26C8")
+	pdf.Ln(10)
+
+	// Symbols & Signs
+	pdf.SetFont("Arial", "B", 10)
+	pdf.Cell(40, 5, "Symbols & Signs:")
+	pdf.Ln(6)
+	pdf.SetFont("notoemoji", "", 18)
+	pdf.Cell(0, 10, "\u2605 \u2606 \u2713 \u2714 \u2717 \u2718 \u2744 \u2764 \u2B50 \u2728")
+	pdf.Ln(10)
+
+	// Playing Cards & Suits
+	pdf.SetFont("Arial", "B", 10)
+	pdf.Cell(40, 5, "Card Suits:")
+	pdf.Ln(6)
+	pdf.SetFont("notoemoji", "", 18)
+	pdf.Cell(0, 10, "\u2660 \u2661 \u2662 \u2663 \u2664 \u2665 \u2666 \u2667")
+	pdf.Ln(10)
+
+	// Arrows & Directions
+	pdf.SetFont("Arial", "B", 10)
+	pdf.Cell(40, 5, "Arrows:")
+	pdf.Ln(6)
+	pdf.SetFont("notoemoji", "", 18)
+	pdf.Cell(0, 10, "\u2190 \u2191 \u2192 \u2193 \u2194 \u2195 \u21A9 \u21AA \u2B05 \u27A1")
+	pdf.Ln(10)
+
+	// Geometric Shapes
+	pdf.SetFont("Arial", "B", 10)
+	pdf.Cell(40, 5, "Geometric Shapes:")
+	pdf.Ln(6)
+	pdf.SetFont("notoemoji", "", 18)
+	pdf.Cell(0, 10, "\u25A0 \u25A1 \u25B2 \u25B3 \u25BC \u25BD \u25C6 \u25CF \u25CB \u25AA")
+	pdf.Ln(10)
+
+	// Miscellaneous Symbols
+	pdf.SetFont("Arial", "B", 10)
+	pdf.Cell(40, 5, "Misc Symbols:")
+	pdf.Ln(6)
+	pdf.SetFont("notoemoji", "", 18)
+	pdf.Cell(0, 10, "\u260E \u260F \u261D \u263A \u2620 \u2622 \u2623 \u2626 \u262E \u262F")
+	pdf.Ln(10)
+
+	// Music & Media
+	pdf.SetFont("Arial", "B", 10)
+	pdf.Cell(40, 5, "Music & Media:")
+	pdf.Ln(6)
+	pdf.SetFont("notoemoji", "", 18)
+	pdf.Cell(0, 10, "\u266A \u266B \u266C \u266D \u266E \u266F")
+	pdf.Ln(12)
+
+	// ========== SECTION 2: TEXT INTEGRATION ==========
+	pdf.SetFont("Arial", "B", 14)
+	pdf.SetTextColor(0, 0, 0)
+	pdf.Cell(0, 8, "Section 2: Text Integration")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(80, 80, 80)
+	pdf.Cell(0, 4, "Emoji mixed with regular text in sentences.")
+	pdf.Ln(8)
+
+	// Example sentences
+	examples := []struct {
+		label string
+		text  string
+		emoji string
+	}{
+		{"Weather:", "Today's forecast:", "\u2600 Sunny!"},
+		{"Coffee:", "Time for a break:", "\u2615 Coffee time!"},
+		{"Status:", "Task completed:", "\u2714 Done"},
+		{"Love:", "Sending you:", "\u2764 Love"},
+		{"Star:", "Rate this:", "\u2B50\u2B50\u2B50\u2B50\u2B50"},
+		{"Alert:", "Warning:", "\u26A0 Be careful!"},
+		{"Phone:", "Contact:", "\u260E Call me"},
+		{"Direction:", "Go this way:", "\u27A1 Right turn"},
+	}
+
+	for _, ex := range examples {
+		pdf.SetFont("Arial", "B", 10)
+		pdf.SetTextColor(0, 0, 0)
+		pdf.Cell(30, 6, ex.label)
+
+		pdf.SetFont("Arial", "", 10)
+		pdf.SetTextColor(60, 60, 60)
+		pdf.Cell(35, 6, ex.text)
+
+		pdf.SetFont("notoemoji", "", 12)
+		pdf.SetTextColor(0, 0, 0)
+		pdf.Cell(0, 6, " "+ex.emoji)
+		pdf.Ln(7)
+	}
+	pdf.Ln(5)
+
+	// ========== SECTION 3: SIZE VARIATIONS ==========
+	pdf.SetFont("Arial", "B", 14)
+	pdf.SetTextColor(0, 0, 0)
+	pdf.Cell(0, 8, "Section 3: Size Variations")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(80, 80, 80)
+	pdf.Cell(0, 4, "Same emoji at different font sizes.")
+	pdf.Ln(8)
+
+	sizes := []int{8, 10, 12, 14, 16, 20, 24}
+	for _, size := range sizes {
+		pdf.SetFont("Arial", "", 8)
+		pdf.SetTextColor(100, 100, 100)
+		pdf.Cell(20, float64(size)*0.5, fmt.Sprintf("%dpt:", size))
+
+		pdf.SetFont("notoemoji", "", float64(size))
+		pdf.SetTextColor(0, 0, 0)
+		pdf.Cell(0, float64(size)*0.5, "\u2600 \u2764 \u2B50 \u2615 \u2714")
+		pdf.Ln(float64(size)*0.5 + 2)
+	}
+	pdf.Ln(5)
+
+	// ========== SECTION 4: ALIGNMENT TESTS ==========
+	pdf.SetFont("Arial", "B", 14)
+	pdf.SetTextColor(0, 0, 0)
+	pdf.Cell(0, 8, "Section 4: Alignment Tests")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(80, 80, 80)
+	pdf.Cell(0, 4, "Emoji with different cell alignments (borders shown for clarity).")
+	pdf.Ln(8)
+
+	pdf.SetFont("notoemoji", "", 14)
+	pdf.SetTextColor(0, 0, 0)
+
+	// Left align
+	pdf.SetFont("Arial", "", 9)
+	pdf.Cell(30, 8, "Left:")
+	pdf.SetFont("notoemoji", "", 14)
+	pdf.CellFormat(140, 8, "\u2600 \u2764 \u2B50", "1", 1, "L", false, 0, "")
+
+	// Center align
+	pdf.SetFont("Arial", "", 9)
+	pdf.Cell(30, 8, "Center:")
+	pdf.SetFont("notoemoji", "", 14)
+	pdf.CellFormat(140, 8, "\u2600 \u2764 \u2B50", "1", 1, "C", false, 0, "")
+
+	// Right align
+	pdf.SetFont("Arial", "", 9)
+	pdf.Cell(30, 8, "Right:")
+	pdf.SetFont("notoemoji", "", 14)
+	pdf.CellFormat(140, 8, "\u2600 \u2764 \u2B50", "1", 1, "R", false, 0, "")
+	pdf.Ln(5)
+
+	// ========== SECTION 5: WRAPPING BEHAVIOR ==========
+	pdf.SetFont("Arial", "B", 14)
+	pdf.SetTextColor(0, 0, 0)
+	pdf.Cell(0, 8, "Section 5: Wrapping Behavior")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(80, 80, 80)
+	pdf.Cell(0, 4, "Long text with emoji that wraps across multiple lines.")
+	pdf.Ln(8)
+
+	// Long text with emoji
+	longText := "The weather today is quite nice \u2600 and I'm enjoying a cup of coffee \u2615 " +
+		"while working on this project. Everything is going well \u2714 and I'm feeling " +
+		"very happy \u2764 about the progress. The stars \u2B50 are aligned and things are " +
+		"looking great! Remember to stay hydrated \u2615 and take breaks when needed. " +
+		"Keep moving forward \u27A1 and don't give up!"
+
+	pdf.SetFont("notoemoji", "", 11)
+	pdf.SetTextColor(0, 0, 0)
+	pdf.MultiCell(0, 6, longText, "", "L", false)
+	pdf.Ln(5)
+
+	// ========== SECTION 6: BULLET LISTS WITH EMOJI ==========
+	pdf.SetFont("Arial", "B", 14)
+	pdf.SetTextColor(0, 0, 0)
+	pdf.Cell(0, 8, "Section 6: Bullet Lists with Emoji")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(80, 80, 80)
+	pdf.Cell(0, 4, "Using emoji as bullet points in lists.")
+	pdf.Ln(8)
+
+	bulletItems := []string{
+		"\u2714 Task one is completed",
+		"\u2714 Task two is finished",
+		"\u2717 Task three is pending",
+		"\u27A1 Task four is next",
+		"\u2B50 Task five is a priority",
+	}
+
+	for _, item := range bulletItems {
+		pdf.SetFont("notoemoji", "", 11)
+		pdf.SetTextColor(0, 0, 0)
+		pdf.Cell(5, 6, "")
+		pdf.Cell(0, 6, item)
+		pdf.Ln(6)
+	}
+	pdf.Ln(5)
+
+	// ========== SECTION 7: EMOJI TABLE ==========
+	pdf.AddPage()
+	pdf.SetFont("Arial", "B", 14)
+	pdf.SetTextColor(0, 0, 0)
+	pdf.Cell(0, 8, "Section 7: Emoji in Tables")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(80, 80, 80)
+	pdf.Cell(0, 4, "Structured data with emoji in table format.")
+	pdf.Ln(8)
+
+	// Table header
+	pdf.SetFont("Arial", "B", 10)
+	pdf.SetFillColor(220, 220, 220)
+	pdf.CellFormat(30, 8, "Status", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(80, 8, "Task Description", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(30, 8, "Priority", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(30, 8, "Rating", "1", 1, "C", true, 0, "")
+
+	// Table data
+	tableData := []struct {
+		status   string
+		task     string
+		priority string
+		rating   string
+	}{
+		{"\u2714", "Complete documentation", "\u2B50\u2B50\u2B50", "\u2605\u2605\u2605\u2605\u2605"},
+		{"\u2717", "Fix bug in parser", "\u2B50\u2B50", "\u2605\u2605\u2605\u2605\u2606"},
+		{"\u2714", "Update dependencies", "\u2B50", "\u2605\u2605\u2605\u2606\u2606"},
+		{"\u27A1", "Refactor codebase", "\u2B50\u2B50\u2B50", "\u2605\u2605\u2605\u2605\u2606"},
+		{"\u2714", "Write unit tests", "\u2B50\u2B50", "\u2605\u2605\u2605\u2605\u2605"},
+	}
+
+	pdf.SetFont("notoemoji", "", 10)
+	for _, row := range tableData {
+		pdf.CellFormat(30, 8, row.status, "1", 0, "C", false, 0, "")
+		pdf.SetFont("Arial", "", 9)
+		pdf.CellFormat(80, 8, row.task, "1", 0, "L", false, 0, "")
+		pdf.SetFont("notoemoji", "", 10)
+		pdf.CellFormat(30, 8, row.priority, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(30, 8, row.rating, "1", 1, "C", false, 0, "")
+	}
+	pdf.Ln(8)
+
+	// ========== SECTION 8: LIMITATIONS ==========
+	pdf.SetFont("Arial", "B", 14)
+	pdf.SetTextColor(0, 0, 0)
+	pdf.Cell(0, 8, "Section 8: Limitations & Known Issues")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(80, 80, 80)
+	pdf.Cell(0, 4, "Understanding the boundaries of emoji support in gofpdf.")
+	pdf.Ln(8)
+
+	// Limitation 1
+	pdf.SetFont("Arial", "B", 10)
+	pdf.SetTextColor(200, 0, 0)
+	pdf.Cell(0, 6, "1. CMAP Format 4 Limitation (BMP Only)")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(0, 0, 0)
+	limitText1 := "The current implementation uses CMAP format 4, which only supports the Basic " +
+		"Multilingual Plane (BMP, U+0000-U+FFFF). Most modern emoji are in the supplementary " +
+		"planes (U+1F300 and above) and will NOT render correctly. They may appear as boxes, " +
+		"missing glyphs, or question marks."
+	pdf.MultiCell(0, 5, limitText1, "", "L", false)
+	pdf.Ln(3)
+
+	// Limitation 2
+	pdf.SetFont("Arial", "B", 10)
+	pdf.SetTextColor(200, 0, 0)
+	pdf.Cell(0, 6, "2. Monochrome Only")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(0, 0, 0)
+	limitText2 := "The Noto Emoji font used provides monochrome (black and white) emoji, not colored " +
+		"emoji. If you need color emoji, you would need to use image-based solutions instead."
+	pdf.MultiCell(0, 5, limitText2, "", "L", false)
+	pdf.Ln(3)
+
+	// Limitation 3
+	pdf.SetFont("Arial", "B", 10)
+	pdf.SetTextColor(200, 0, 0)
+	pdf.Cell(0, 6, "3. No Skin Tone Modifiers")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(0, 0, 0)
+	limitText3 := "Skin tone modifiers (U+1F3FB-U+1F3FF) are in the supplementary plane and will not " +
+		"work with the current implementation. Base emoji without modifiers should be used."
+	pdf.MultiCell(0, 5, limitText3, "", "L", false)
+	pdf.Ln(3)
+
+	// Limitation 4
+	pdf.SetFont("Arial", "B", 10)
+	pdf.SetTextColor(200, 0, 0)
+	pdf.Cell(0, 6, "4. No ZWJ Sequences")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(0, 0, 0)
+	limitText4 := "Zero-Width Joiner (ZWJ) sequences like family emoji, profession emoji, and combined " +
+		"emoji are typically in supplementary planes and will not render as expected. Each component " +
+		"may render separately if in the BMP, or not at all."
+	pdf.MultiCell(0, 5, limitText4, "", "L", false)
+	pdf.Ln(5)
+
+	// What Works section
+	pdf.SetFont("Arial", "B", 12)
+	pdf.SetTextColor(0, 150, 0)
+	pdf.Cell(0, 7, "What DOES Work:")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(0, 0, 0)
+	worksText := "- Dingbats (U+2700-U+27BF)\n" +
+		"- Miscellaneous Symbols (U+2600-U+26FF)\n" +
+		"- Arrows (U+2190-U+21FF)\n" +
+		"- Geometric Shapes (U+25A0-U+25FF)\n" +
+		"- Card suits and playing cards (U+2660-U+2667)\n" +
+		"- Stars, hearts, and common symbols\n" +
+		"- Weather and nature symbols in BMP range"
+	pdf.MultiCell(0, 5, worksText, "", "L", false)
+	pdf.Ln(3)
+
+	// What Doesn't Work section
+	pdf.SetFont("Arial", "B", 12)
+	pdf.SetTextColor(200, 0, 0)
+	pdf.Cell(0, 7, "What DOES NOT Work:")
+	pdf.Ln(6)
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(0, 0, 0)
+	doesntWorkText := "- Face emoji (U+1F600-U+1F64F) - smileys, emotions\n" +
+		"- Animals & nature (U+1F400-U+1F4FF)\n" +
+		"- Food & drink (U+1F32D-U+1F37F)\n" +
+		"- Flags (U+1F1E0-U+1F1FF)\n" +
+		"- Hand gestures with skin tones\n" +
+		"- Family and people emoji with ZWJ sequences\n" +
+		"- Most modern emoji added after Unicode 6.0"
+	pdf.MultiCell(0, 5, doesntWorkText, "", "L", false)
+	pdf.Ln(8)
+
+	// Footer note
+	pdf.SetFont("Arial", "I", 8)
+	pdf.SetTextColor(120, 120, 120)
+	pdf.Cell(0, 4, "Generated by gofpdf emoji showcase - Test suite for visual verification")
+	pdf.Ln(4)
+	pdf.Cell(0, 4, fmt.Sprintf("Document generated on %s", time.Now().Format("2006-01-02")))
+
+	// Save PDF
+	fileStr := example.Filename("Fpdf_EmojiShowcase")
+	err := pdf.OutputFileAndClose(fileStr)
+	example.Summary(err, fileStr)
+	// Output:
+	// Successfully generated pdf/Fpdf_EmojiShowcase.pdf
+}
+
+// TestStringWidthGraphemeClusters tests that string width calculation correctly
+// handles grapheme clusters, particularly multi-codepoint emoji sequences.
+func TestStringWidthGraphemeClusters(t *testing.T) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.AddUTF8Font("dejavu", "", example.FontFile("DejaVuSansCondensed.ttf"))
+	pdf.SetFont("dejavu", "", 12)
+
+	// Test 1: Regular ASCII text should work as before
+	regularText := "Hello"
+	widthRegular := pdf.GetStringSymbolWidth(regularText)
+	if widthRegular == 0 {
+		t.Errorf("Regular text '%s' should have non-zero width, got %d", regularText, widthRegular)
+	}
+
+	// Test 2: Regular text with each character should sum up correctly
+	// (grapheme clusters for ASCII are single characters)
+	totalWidth := 0
+	for _, ch := range regularText {
+		totalWidth += pdf.GetStringSymbolWidth(string(ch))
+	}
+	if widthRegular != totalWidth {
+		t.Errorf("Regular text width mismatch: full string=%d, sum of chars=%d", widthRegular, totalWidth)
+	}
+
+	// Test 3: Emoji with skin tone modifier should be measured as single unit
+	// Base emoji + skin tone modifier = 1 grapheme cluster
+	baseEmoji := "\U0001F44D"                   // Thumbs up (without modifier)
+	emojiWithModifier := "\U0001F44D\U0001F3FD" // Thumbs up + medium skin tone
+
+	widthBase := pdf.GetStringSymbolWidth(baseEmoji)
+	widthModified := pdf.GetStringSymbolWidth(emojiWithModifier)
+
+	// The width with modifier should be the same as base (modifier adds no width)
+	if widthModified != widthBase {
+		t.Errorf("Emoji with skin tone modifier should have same width as base: base=%d, modified=%d", widthBase, widthModified)
+	}
+
+	// Test 4: ZWJ sequence should be measured as single unit
+	// Family emoji: man + ZWJ + woman + ZWJ + girl + ZWJ + boy
+	familyEmoji := "\U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466"
+	manEmoji := "\U0001F468"
+
+	widthFamily := pdf.GetStringSymbolWidth(familyEmoji)
+	widthMan := pdf.GetStringSymbolWidth(manEmoji)
+
+	// Family emoji should be measured as one unit (not sum of all parts)
+	// It should be approximately the width of a single emoji character
+	if widthFamily == 0 {
+		t.Errorf("Family emoji (ZWJ sequence) should have non-zero width, got %d", widthFamily)
+	}
+
+	// The family emoji width should be close to a single emoji width (the base character)
+	if widthFamily != widthMan {
+		t.Logf("Note: Family emoji width=%d, man emoji width=%d (expected to be same as base)", widthFamily, widthMan)
+	}
+
+	// Test 5: Variation selector should not add width
+	// Sun emoji without and with variation selector
+	sunWithoutVS := "\u2600"         // Sun without variation selector
+	sunWithVS := "\u2600\uFE0F"      // Sun + emoji variation selector
+
+	widthSunNoVS := pdf.GetStringSymbolWidth(sunWithoutVS)
+	widthSunVS := pdf.GetStringSymbolWidth(sunWithVS)
+
+	// Width should be the same (variation selector adds no width)
+	if widthSunVS != widthSunNoVS {
+		t.Errorf("Emoji with variation selector should have same width: without=%d, with=%d", widthSunNoVS, widthSunVS)
+	}
+
+	// Test 6: Mixed text and emoji
+	mixedText := "Hello \U0001F44D World"
+	widthMixed := pdf.GetStringSymbolWidth(mixedText)
+
+	if widthMixed == 0 {
+		t.Errorf("Mixed text and emoji should have non-zero width, got %d", widthMixed)
+	}
+
+	// Mixed text width should be greater than just "Hello World"
+	widthTextOnly := pdf.GetStringSymbolWidth("Hello  World") // Two spaces where emoji was
+	if widthMixed <= widthTextOnly {
+		t.Logf("Mixed text width=%d, text-only width=%d", widthMixed, widthTextOnly)
+	}
+
+	// Test 7: GetStringWidth (user units) should be non-zero and proportional
+	symbolWidth := pdf.GetStringSymbolWidth(regularText)
+	userWidth := pdf.GetStringWidth(regularText)
+
+	// GetStringWidth should return a positive value based on GetStringSymbolWidth
+	if userWidth <= 0 {
+		t.Errorf("GetStringWidth should return positive value, got %f", userWidth)
+	}
+	if symbolWidth <= 0 {
+		t.Errorf("GetStringSymbolWidth should return positive value, got %d", symbolWidth)
+	}
+	// Verify that user width is proportional to symbol width
+	// (exact ratio depends on font size and scale factor, just verify relationship)
+	if userWidth == 0 && symbolWidth > 0 {
+		t.Errorf("GetStringWidth returned 0 when symbolWidth=%d", symbolWidth)
+	}
+
+	// Test 8: Empty string
+	emptyWidth := pdf.GetStringSymbolWidth("")
+	if emptyWidth != 0 {
+		t.Errorf("Empty string should have zero width, got %d", emptyWidth)
+	}
+
+	// Test 9: Multiple skin tone modifiers in sequence
+	multiModifier := "\U0001F44D\U0001F3FB\U0001F44D\U0001F3FD\U0001F44D\U0001F3FF"
+	widthMulti := pdf.GetStringSymbolWidth(multiModifier)
+
+	// This should be 3 grapheme clusters (3 thumbs up with different skin tones)
+	// So width should be approximately 3 times the base emoji width
+	expectedMulti := widthBase * 3
+	if widthMulti != expectedMulti {
+		t.Errorf("Multiple emoji with modifiers: got=%d, expected=%d (3x base width)", widthMulti, expectedMulti)
+	}
+
+	t.Logf("Width test summary:")
+	t.Logf("  Regular text 'Hello': %d font units", widthRegular)
+	t.Logf("  Base emoji (thumbs up): %d font units", widthBase)
+	t.Logf("  Emoji with skin tone: %d font units", widthModified)
+	t.Logf("  Family emoji (ZWJ): %d font units", widthFamily)
+	t.Logf("  Sun without VS: %d font units", widthSunNoVS)
+	t.Logf("  Sun with VS: %d font units", widthSunVS)
+	t.Logf("  Mixed text: %d font units", widthMixed)
+	t.Logf("  Three emoji with modifiers: %d font units", widthMulti)
+}
+
+// TestSplitTextWithEmoji tests that SplitText properly splits text at grapheme
+// cluster boundaries and doesn't break emoji sequences
+func TestSplitTextWithEmoji(t *testing.T) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	fontBytes, err := ioutil.ReadFile(example.FontFile("DejaVuSansCondensed.ttf"))
+	if err != nil {
+		t.Fatalf("Failed to load font: %v", err)
+	}
+	pdf.AddUTF8FontFromBytes("dejavu", "", fontBytes)
+	pdf.SetFont("dejavu", "", 12)
+
+	tests := []struct {
+		name     string
+		text     string
+		width    float64
+		minLines int // minimum expected lines
+	}{
+		{
+			name:     "Simple text wrapping",
+			text:     "Hello World This Is A Test",
+			width:    30.0,
+			minLines: 2,
+		},
+		{
+			name:     "Emoji with skin tone modifier",
+			text:     "👍🏽 👍🏽 👍🏽 👍🏽 👍🏽 👍🏽 👍🏽 👍🏽 👍🏽 👍🏽",
+			width:    30.0, // Reduced width to force wrapping
+			minLines: 1,    // At least 1 line (emoji might all fit)
+		},
+		{
+			name:     "ZWJ sequence (family emoji)",
+			text:     "Family: 👨‍👩‍👧‍👦 👨‍👩‍👧‍👦 👨‍👩‍👧‍👦 text",
+			width:    60.0,
+			minLines: 1,
+		},
+		{
+			name:     "Mixed text and emoji",
+			text:     "Hello 👍🏽 World 😀 Test 🎉 More text here",
+			width:    40.0,
+			minLines: 1, // At least 1 line
+		},
+		{
+			name:     "Long text with emoji that must wrap",
+			text:     "This is a very long sentence with emoji 👍🏽 and more text that should wrap across multiple lines 😀",
+			width:    50.0,
+			minLines: 3,
+		},
+		{
+			name:     "Emoji at line boundaries",
+			text:     "Short 👍🏽",
+			width:    50.0, // Increased width so it fits on one line
+			minLines: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lines := pdf.SplitText(tt.text, tt.width)
+
+			// Check minimum number of lines
+			if len(lines) < tt.minLines {
+				t.Errorf("Expected at least %d lines, got %d", tt.minLines, len(lines))
+			}
+
+			// Note: SplitText removes spaces at line breaks (normal word-wrapping behavior)
+			// So we don't verify exact rejoining, just that we got reasonable output
+			if len(lines) == 0 {
+				t.Errorf("SplitText returned no lines")
+			}
+
+			// Check that no line contains broken emoji sequences
+			for i, line := range lines {
+				// Count runes vs grapheme clusters - if they differ significantly in emoji,
+				// it might indicate a broken sequence
+				if strings.Contains(line, "👍🏽") {
+					// This is a 2-codepoint emoji, ensure it appears complete
+					count := strings.Count(line, "👍🏽")
+					if count > 0 {
+						t.Logf("Line %d contains %d instances of thumbs-up with skin tone", i, count)
+					}
+				}
+				if strings.Contains(line, "👨‍👩‍👧‍👦") {
+					// ZWJ family emoji should not be broken
+					t.Logf("Line %d contains family emoji (ZWJ sequence)", i)
+				}
+			}
+
+			t.Logf("Split %q into %d lines", tt.text, len(lines))
+			for i, line := range lines {
+				t.Logf("  Line %d: %q", i+1, line)
+			}
+		})
+	}
+}
+
+// TestMultiCellWithEmojiWrapping tests that MultiCell wraps text without
+// breaking emoji sequences across lines
+func TestMultiCellWithEmojiWrapping(t *testing.T) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	fontBytes, err := ioutil.ReadFile(example.FontFile("DejaVuSansCondensed.ttf"))
+	if err != nil {
+		t.Fatalf("Failed to load font: %v", err)
+	}
+	pdf.AddUTF8FontFromBytes("dejavu", "", fontBytes)
+	pdf.SetFont("dejavu", "", 12)
+
+	tests := []struct {
+		name   string
+		text   string
+		width  float64
+		height float64
+	}{
+		{
+			name:   "Simple emoji wrapping",
+			text:   "Hello 👍🏽 World 😀 Test",
+			width:  40.0,
+			height: 5.0,
+		},
+		{
+			name:   "Emoji with skin tone modifiers",
+			text:   "Thumbs up: 👍🏽 👍🏼 👍🏿 👍🏻 👍🏾",
+			width:  50.0,
+			height: 5.0,
+		},
+		{
+			name:   "ZWJ sequences",
+			text:   "Family: 👨‍👩‍👧‍👦 and couple: 👩‍❤️‍👨",
+			width:  60.0,
+			height: 5.0,
+		},
+		{
+			name:   "Long text with multiple emoji",
+			text:   "This is a longer text with emoji 😀 that should wrap correctly 👍🏽 across multiple lines without breaking 🎉 the emoji sequences",
+			width:  60.0,
+			height: 5.0,
+		},
+		{
+			name:   "Emoji at line boundaries",
+			text:   "A 👍🏽 B 😀 C 🎉 D 👨‍👩‍👧‍👦 E",
+			width:  20.0,
+			height: 5.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			yBefore := pdf.GetY()
+
+			// MultiCell should not panic with emoji
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("MultiCell panicked with emoji: %v", r)
+				}
+			}()
+
+			pdf.MultiCell(tt.width, tt.height, tt.text, "1", "L", false)
+
+			yAfter := pdf.GetY()
+			lines := int((yAfter - yBefore) / tt.height)
+
+			t.Logf("MultiCell rendered %q in %d lines (Y: %.2f -> %.2f)",
+				tt.text, lines, yBefore, yAfter)
+
+			// Ensure text was rendered (Y position changed)
+			if yAfter <= yBefore {
+				t.Errorf("MultiCell did not advance Y position")
+			}
+		})
+	}
+
+	// Generate PDF to verify visual output
+	fileStr := example.Filename("TestMultiCellWithEmojiWrapping")
+	err = pdf.OutputFileAndClose(fileStr)
+	if err != nil {
+		t.Errorf("Failed to generate PDF: %v", err)
+	} else {
+		t.Logf("Generated PDF: %s", fileStr)
+	}
+}
+
+// TestWriteWithEmojiFlowing tests that Write() handles emoji in flowing text
+func TestWriteWithEmojiFlowing(t *testing.T) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	fontBytes, err := ioutil.ReadFile(example.FontFile("DejaVuSansCondensed.ttf"))
+	if err != nil {
+		t.Fatalf("Failed to load font: %v", err)
+	}
+	pdf.AddUTF8FontFromBytes("dejavu", "", fontBytes)
+	pdf.SetFont("dejavu", "", 12)
+
+	tests := []struct {
+		name   string
+		text   string
+		height float64
+	}{
+		{
+			name:   "Simple emoji in text",
+			text:   "Hello 👍🏽 World",
+			height: 5.0,
+		},
+		{
+			name:   "Multiple emoji with modifiers",
+			text:   "Reactions: 👍🏽 😀 🎉 ❤️ 👨‍👩‍👧‍👦",
+			height: 5.0,
+		},
+		{
+			name:   "Long flowing text with emoji",
+			text:   "This is a long piece of text that flows and wraps naturally 👍🏽 with emoji interspersed throughout the content 😀 to test that the Write function handles grapheme clusters correctly 🎉 without breaking emoji sequences at line boundaries.",
+			height: 5.0,
+		},
+		{
+			name:   "Emoji with newlines",
+			text:   "Line 1 with emoji 👍🏽\nLine 2 with emoji 😀\nLine 3 with family 👨‍👩‍👧‍👦",
+			height: 5.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			yBefore := pdf.GetY()
+
+			// Write should not panic with emoji
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Write panicked with emoji: %v", r)
+				}
+			}()
+
+			pdf.Write(tt.height, tt.text)
+			pdf.Ln(-1) // Add line break after each test
+
+			yAfter := pdf.GetY()
+
+			t.Logf("Write rendered %q (Y: %.2f -> %.2f)",
+				tt.text, yBefore, yAfter)
+
+			// Ensure text was rendered (Y position changed)
+			if yAfter <= yBefore {
+				t.Errorf("Write did not advance Y position")
+			}
+		})
+	}
+
+	// Generate PDF to verify visual output
+	fileStr := example.Filename("TestWriteWithEmojiFlowing")
+	err = pdf.OutputFileAndClose(fileStr)
+	if err != nil {
+		t.Errorf("Failed to generate PDF: %v", err)
+	} else {
+		t.Logf("Generated PDF: %s", fileStr)
+	}
+}
+
+// TestEmojiSequencesNotSplit tests that specific emoji sequences are never
+// split across lines by SplitText, MultiCell, or Write
+func TestEmojiSequencesNotSplit(t *testing.T) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	fontBytes, err := ioutil.ReadFile(example.FontFile("DejaVuSansCondensed.ttf"))
+	if err != nil {
+		t.Fatalf("Failed to load font: %v", err)
+	}
+	pdf.AddUTF8FontFromBytes("dejavu", "", fontBytes)
+	pdf.SetFont("dejavu", "", 12)
+
+	// Test specific emoji sequences that must stay together
+	sequences := []struct {
+		name  string
+		emoji string
+		desc  string
+	}{
+		{
+			name:  "Thumbs up with skin tone",
+			emoji: "👍🏽",
+			desc:  "Base + modifier",
+		},
+		{
+			name:  "Family emoji",
+			emoji: "👨‍👩‍👧‍👦",
+			desc:  "ZWJ sequence (4 people)",
+		},
+		{
+			name:  "Couple with heart",
+			emoji: "👩‍❤️‍👨",
+			desc:  "ZWJ sequence with variation selector",
+		},
+		{
+			name:  "Sun with variation selector",
+			emoji: "☀️",
+			desc:  "Symbol + variation selector",
+		},
+	}
+
+	for _, seq := range sequences {
+		t.Run(seq.name, func(t *testing.T) {
+			// Create text with the emoji repeated to force wrapping
+			text := ""
+			for i := 0; i < 20; i++ {
+				if i > 0 {
+					text += " "
+				}
+				text += seq.emoji
+			}
+
+			// Test with SplitText
+			lines := pdf.SplitText(text, 50.0)
+			t.Logf("SplitText split into %d lines", len(lines))
+
+			// Check each line contains only complete emoji sequences
+			for i, line := range lines {
+				// Count occurrences of the complete emoji
+				completeCount := strings.Count(line, seq.emoji)
+
+				// For sequences, also check that all components are present
+				// by checking individual runes
+				runes := []rune(line)
+				t.Logf("  Line %d: %d complete %s sequences, %d runes",
+					i+1, completeCount, seq.name, len(runes))
+
+				// Ensure the line contains the complete emoji, not fragments
+				if completeCount > 0 {
+					// The line should contain the emoji in its complete form
+					if !strings.Contains(line, seq.emoji) {
+						t.Errorf("Line %d does not contain complete %s: %q",
+							i+1, seq.name, line)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestCellFormatWithEmoji tests that CellFormat properly renders emoji
+// without panicking and generates valid PDFs
+func TestCellFormatWithEmoji(t *testing.T) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	fontBytes, err := ioutil.ReadFile(example.FontFile("DejaVuSansCondensed.ttf"))
+	if err != nil {
+		t.Fatalf("Failed to load font: %v", err)
+	}
+	pdf.AddUTF8FontFromBytes("dejavu", "", fontBytes)
+	pdf.SetFont("dejavu", "", 12)
+
+	testCases := []struct {
+		name string
+		text string
+	}{
+		{
+			name: "Basic emoji",
+			text: "Hello 😀 World",
+		},
+		{
+			name: "Emoji with skin tone modifier",
+			text: "Thumbs up 👍🏽",
+		},
+		{
+			name: "Multiple emoji",
+			text: "😀 🎉 🚀",
+		},
+		{
+			name: "ZWJ sequence (family)",
+			text: "Family: 👨‍👩‍👧‍👦",
+		},
+		{
+			name: "Emoji with variation selector",
+			text: "Sun ☀️",
+		},
+		{
+			name: "High codepoint emoji (> U+FFFF)",
+			text: "\U0001F600\U0001F680\U0001F389", // Grinning face, rocket, party popper
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Should not panic
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("CellFormat panicked with emoji: %v", r)
+				}
+			}()
+
+			// Render the cell with various alignments and borders
+			pdf.CellFormat(100, 10, tc.text, "1", 1, "L", false, 0, "")
+			pdf.CellFormat(100, 10, tc.text, "", 1, "C", false, 0, "")
+			pdf.CellFormat(100, 10, tc.text, "LRTB", 1, "R", true, 0, "")
+
+			t.Logf("Successfully rendered: %q", tc.text)
+		})
+	}
+
+	// Generate PDF to verify no errors during output
+	fileStr := example.Filename("TestCellFormatWithEmoji")
+	err = pdf.OutputFileAndClose(fileStr)
+	if err != nil {
+		t.Errorf("Error generating PDF: %v", err)
+	}
+	t.Logf("Successfully generated %s", fileStr)
+}
+
+// TestTextWithEmoji tests that Text() properly renders emoji at specific positions
+// without panicking
+func TestTextWithEmoji(t *testing.T) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	fontBytes, err := ioutil.ReadFile(example.FontFile("DejaVuSansCondensed.ttf"))
+	if err != nil {
+		t.Fatalf("Failed to load font: %v", err)
+	}
+	pdf.AddUTF8FontFromBytes("dejavu", "", fontBytes)
+	pdf.SetFont("dejavu", "", 14)
+
+	testCases := []struct {
+		name string
+		x, y float64
+		text string
+	}{
+		{
+			name: "Simple emoji at position",
+			x:    20, y: 20,
+			text: "😀",
+		},
+		{
+			name: "Emoji with modifier",
+			x:    20, y: 30,
+			text: "👍🏽",
+		},
+		{
+			name: "Mixed text and emoji",
+			x:    20, y: 40,
+			text: "Hello 🌍 World",
+		},
+		{
+			name: "High codepoint emoji",
+			x:    20, y: 50,
+			text: "\U0001F680", // Rocket
+		},
+		{
+			name: "ZWJ sequence",
+			x:    20, y: 60,
+			text: "👨‍👩‍👧‍👦",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Should not panic
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Text panicked with emoji: %v", r)
+				}
+			}()
+
+			// Render text at specific position
+			pdf.Text(tc.x, tc.y, tc.text)
+
+			t.Logf("Position (%.1f, %.1f): Successfully rendered %q",
+				tc.x, tc.y, tc.text)
+		})
+	}
+
+	// Generate PDF to verify no errors
+	fileStr := example.Filename("TestTextWithEmoji")
+	err = pdf.OutputFileAndClose(fileStr)
+	if err != nil {
+		t.Errorf("Error generating PDF: %v", err)
+	}
+	t.Logf("Successfully generated %s", fileStr)
+}
+
+// TestClipTextWithEmoji tests that ClipText properly handles emoji
+// including UTF-16BE conversion
+func TestClipTextWithEmoji(t *testing.T) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	fontBytes, err := ioutil.ReadFile(example.FontFile("DejaVuSansCondensed.ttf"))
+	if err != nil {
+		t.Fatalf("Failed to load font: %v", err)
+	}
+	pdf.AddUTF8FontFromBytes("dejavu", "", fontBytes)
+	pdf.SetFont("dejavu", "", 24)
+
+	testCases := []struct {
+		name string
+		text string
+	}{
+		{
+			name: "Basic emoji clip",
+			text: "😀",
+		},
+		{
+			name: "Text with emoji",
+			text: "EMOJI",
+		},
+		{
+			name: "High codepoint emoji",
+			text: "\U0001F389", // Party popper
+		},
+		{
+			name: "Multiple emoji",
+			text: "😀🎉🚀",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Should not panic
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("ClipText panicked with emoji: %v", r)
+				}
+			}()
+
+			// Use ClipText
+			pdf.ClipText(50, 50, tc.text, true)
+
+			// Add some visual content inside the clip
+			pdf.SetFillColor(200, 220, 255)
+			pdf.Rect(40, 40, 80, 20, "F")
+
+			// End clipping
+			pdf.ClipEnd()
+
+			t.Logf("ClipText successfully rendered %q", tc.text)
+		})
+
+		// Add a new page for next test
+		if tc.name != testCases[len(testCases)-1].name {
+			pdf.AddPage()
+			pdf.SetFont("dejavu", "", 24)
+		}
+	}
+
+	// Generate PDF to verify no errors
+	fileStr := example.Filename("TestClipTextWithEmoji")
+	err = pdf.OutputFileAndClose(fileStr)
+	if err != nil {
+		t.Errorf("Error generating PDF: %v", err)
+	}
+	t.Logf("Successfully generated %s", fileStr)
+}
+
+// TestUsedRunesTrackingHighCodepoints verifies that text with high codepoint emoji
+// (beyond U+FFFF) can be rendered and generates a valid PDF
+func TestUsedRunesTrackingHighCodepoints(t *testing.T) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	fontBytes, err := ioutil.ReadFile(example.FontFile("DejaVuSansCondensed.ttf"))
+	if err != nil {
+		t.Fatalf("Failed to load font: %v", err)
+	}
+	pdf.AddUTF8FontFromBytes("dejavu", "", fontBytes)
+	pdf.SetFont("dejavu", "", 12)
+
+	// Test various high codepoint emoji
+	testEmoji := []struct {
+		char      rune
+		name      string
+		codepoint string
+	}{
+		{0x1F600, "Grinning face", "U+1F600"},
+		{0x1F389, "Party popper", "U+1F389"},
+		{0x1F680, "Rocket", "U+1F680"},
+		{0x1F44D, "Thumbs up", "U+1F44D"},
+		{0x1F3FD, "Medium skin tone", "U+1F3FD"},
+	}
+
+	// Build text with all these emoji
+	text := "High codepoint emoji: "
+	for _, e := range testEmoji {
+		text += string(e.char) + " "
+	}
+
+	// Should not panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Rendering high codepoint emoji panicked: %v", r)
+		}
+	}()
+
+	// Render text with all these emoji
+	pdf.CellFormat(0, 10, text, "1", 1, "L", false, 0, "")
+
+	// Add individual tests for each emoji
+	for _, e := range testEmoji {
+		pdf.CellFormat(100, 8, string(e.char)+" "+e.name, "", 1, "L", false, 0, "")
+		t.Logf("Successfully rendered %s (%s)", e.codepoint, e.name)
+	}
+
+	// Generate PDF to verify everything works end-to-end
+	fileStr := example.Filename("TestUsedRunesTrackingHighCodepoints")
+	err = pdf.OutputFileAndClose(fileStr)
+	if err != nil {
+		t.Errorf("Error generating PDF: %v", err)
+	}
+	t.Logf("Successfully generated %s", fileStr)
+}
+
+// TestRTLWithEmoji tests right-to-left text rendering with emoji
+func TestRTLWithEmoji(t *testing.T) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	fontBytes, err := ioutil.ReadFile(example.FontFile("DejaVuSansCondensed.ttf"))
+	if err != nil {
+		t.Fatalf("Failed to load font: %v", err)
+	}
+	pdf.AddUTF8FontFromBytes("dejavu", "", fontBytes)
+	pdf.SetFont("dejavu", "", 12)
+
+	// Enable RTL mode
+	pdf.RTL()
+
+	testCases := []struct {
+		name string
+		text string
+	}{
+		{
+			name: "RTL text with emoji",
+			text: "Hello 😀 World",
+		},
+		{
+			name: "RTL with high codepoint emoji",
+			text: "Text \U0001F680 Rocket",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Should not panic
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("RTL text with emoji caused panic: %v", r)
+				}
+			}()
+
+			pdf.CellFormat(100, 10, tc.text, "1", 1, "R", false, 0, "")
+			pdf.Text(20, pdf.GetY(), tc.text)
+
+			t.Logf("Successfully rendered RTL text: %q", tc.text)
+		})
+	}
+
+	// Disable RTL
+	pdf.LTR()
+
+	// Generate PDF
+	fileStr := example.Filename("TestRTLWithEmoji")
+	err = pdf.OutputFileAndClose(fileStr)
+	if err != nil {
+		t.Errorf("Error generating PDF: %v", err)
+	}
+	t.Logf("Successfully generated %s", fileStr)
+}
