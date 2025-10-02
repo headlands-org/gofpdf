@@ -4238,8 +4238,9 @@ func (f *Fpdf) putfonts() {
 				f.out("endobj")
 
 				f.newobj()
-				f.out("<</Length " + strconv.Itoa(len(toUnicode)) + ">>")
-				f.putstream([]byte(toUnicode))
+				toUnicodeCMap := font.utf8File.ToUnicodeCMap
+				f.out("<</Length " + strconv.Itoa(len(toUnicodeCMap)) + ">>")
+				f.putstream([]byte(toUnicodeCMap))
 				f.out("endobj")
 
 				// CIDInfo
@@ -4267,19 +4268,35 @@ func (f *Fpdf) putfonts() {
 				f.out(s.String())
 				f.out("endobj")
 
-				// Embed CIDToGIDMap
-				cidToGidMap := make([]byte, 256*256*2)
+			// Embed CIDToGIDMap
+			// Detect if supplementary plane characters are used (any code > 0xFFFF)
+			hasSupplementary := false
+			for cc := range CodeSignDictionary {
+				if cc > 0xFFFF {
+					hasSupplementary = true
+					break
+				}
+			}
 
+			f.newobj()
+			if hasSupplementary {
+				// Use identity mapping for supplementary plane support
+				// PDF spec allows /Identity as a name object instead of a stream
+				// This means CID == GID (identity mapping) for all characters
+				f.out("/Identity")
+			} else {
+				// Use explicit array for BMP-only (backward compatibility)
+				cidToGidMap := make([]byte, 256*256*2)
 				for cc, glyph := range CodeSignDictionary {
 					cidToGidMap[cc*2] = byte(glyph >> 8)
 					cidToGidMap[cc*2+1] = byte(glyph & 0xFF)
 				}
-
 				cidToGidMap = sliceCompress(cidToGidMap)
-				f.newobj()
 				f.out("<</Length " + strconv.Itoa(len(cidToGidMap)) + "/Filter /FlateDecode>>")
 				f.putstream(cidToGidMap)
-				f.out("endobj")
+			}
+			f.out("endobj")
+
 
 				//Font file
 				f.newobj()

@@ -13,7 +13,7 @@ support for text, drawing and images.
 ## Features
 
   - UTF-8 support (full 4-byte sequence support)
-  - Emoji rendering with BMP Unicode support (U+2000-U+2FFF)
+  - Full Unicode emoji support (U+0000-U+10FFFF) including modern emoji
   - Grapheme cluster handling for complex Unicode text
   - Choice of measurement unit, page format and margins
   - Page header and footer management
@@ -177,48 +177,46 @@ Fonts](http://dejavu-fonts.org/).
 gofpdf supports emoji rendering using monochrome TrueType fonts such as
 Noto Emoji. The library includes full UTF-8 support with 4-byte sequence
 handling and grapheme cluster processing, enabling proper rendering of
-many Unicode symbols and emoji characters.
+the complete Unicode range including modern emoji (U+0000 to U+10FFFF).
 
 ### What Works
 
-The library successfully renders emoji from the Basic Multilingual Plane
-(BMP), specifically in the Unicode range U+2000 to U+2FFF. This includes:
+The library successfully renders the complete Unicode range (U+0000 to U+10FFFF),
+including modern emoji from the Supplementary Multilingual Plane. This includes:
 
+  - Modern emoji: 😀 😃 😄 🎉 🚀 ⭐ ❤️
   - Weather symbols: ☀ ☁ ☂ ☃ ⛄ ⚡
-  - Common symbols: ❤ ⭐ ✔ ✘ ☕ ✉
+  - Common symbols: ✔ ✘ ☕ ✉
   - Arrows and geometric shapes: ← → ↑ ↓ ▲ ▼ ◆ ●
   - Zodiac and miscellaneous: ♈ ♉ ♊ ♋ ☮ ☯ ⚠
   - Full UTF-8 support for 4-byte character sequences
   - Grapheme cluster handling for complex character combinations
   - Right-to-left (RTL) and left-to-right (LTR) text rendering
 
+### Font Requirements
+
+gofpdf supports the full Unicode range (U+0000 to U+10FFFF) including modern emoji.
+Font files must include CMAP Format 12 tables for supplementary plane characters
+(U+10000 and above, including modern emoji like 😀 🎉 🚀).
+
+Most modern fonts (Noto Emoji, Noto Sans, etc.) include CMAP Format 12 support.
+The library automatically detects and uses Format 12 when available, falling back
+to Format 4 for fonts that only support the Basic Multilingual Plane (U+0000-U+FFFF).
+
+**Technical Note**: During font loading, gofpdf scans the font's CMAP table for
+Format 12 subtables. If found, the library uses Format 12 for character-to-glyph
+mapping, enabling full Unicode support. Legacy fonts without Format 12 continue
+to work but are limited to the BMP range.
+
 ### Limitations
-
-Due to technical constraints in the PDF font subsetting implementation,
-certain emoji types are not supported:
-
-  - **CMAP Format 4 Limitation**: gofpdf uses CMAP format 4 for font
-    character mapping, which only supports the Basic Multilingual Plane
-    (BMP, U+0000 to U+FFFF). Modern emoji in the Supplementary Multilingual
-    Plane (U+1F300 and above) cannot be rendered with the current
-    implementation.
 
   - **No Color Emoji**: Only monochrome (single-color) emoji rendering is
     supported. Color emoji fonts (such as Apple Color Emoji or Noto Color
     Emoji) will not display colors in the generated PDF.
 
-  - **Supplementary Plane Emoji**: Popular modern emoji like 😀 🎉 🚀
-    (U+1F600+) may not render correctly or may appear as missing glyphs,
-    since they fall outside the BMP range.
-
-### Workarounds
-
-For emoji outside the BMP range, consider these alternatives:
-
-  - Use BMP emoji equivalents when available (e.g., ☺ instead of 😀)
-  - Embed emoji as small PNG/JPEG images using `ImageOptions()`
-  - Use pictographic symbols from the supported Unicode ranges
-  - Consider SVG-to-image conversion for complex emoji needs
+  - **Font Support Required**: To render modern emoji, your font must include
+    both the emoji glyphs and CMAP Format 12 tables. Fonts without Format 12
+    are limited to the Basic Multilingual Plane (U+0000-U+FFFF).
 
 ### Quick Start with Emoji
 
@@ -254,18 +252,18 @@ func main() {
     pdf := gofpdf.New("P", "mm", "A4", "")
     pdf.AddPage()
 
-    // Add Noto Emoji font
+    // Add Noto Emoji font (includes CMAP Format 12 for modern emoji)
     pdf.AddUTF8Font("notoemoji", "", "NotoEmoji-Regular.ttf")
     pdf.SetFont("notoemoji", "", 16)
 
-    // Render BMP emoji (these work!)
+    // Render modern emoji from the Supplementary Plane
+    pdf.Cell(0, 10, "Modern emoji: 😀 😃 😄 🎉 🚀")
+    pdf.Ln(12)
     pdf.Cell(0, 10, "Weather: ☀ ☁ ☂ ☃ ⛄")
     pdf.Ln(12)
     pdf.Cell(0, 10, "Symbols: ❤ ⭐ ✔ ☕ ✉")
     pdf.Ln(12)
     pdf.Cell(0, 10, "Arrows: → ↑ ← ↓")
-    pdf.Ln(12)
-    pdf.Cell(0, 10, "Shapes: ● ▲ ◆ ■")
 
     // Output the PDF
     err := pdf.OutputFileAndClose("emoji.pdf")
@@ -278,20 +276,20 @@ func main() {
 #### 3. Expected Output
 
 Running the above code will generate a PDF file named `emoji.pdf`
-containing the rendered emoji symbols in monochrome (black). The symbols
-will appear as outlined or filled shapes, depending on the font design.
+containing the rendered emoji symbols in monochrome (black). Modern emoji
+from the Supplementary Plane (😀 🎉 🚀) will render correctly when using
+a font with CMAP Format 12 support like Noto Emoji. The symbols will
+appear as outlined or filled shapes, depending on the font design.
 
 ### Troubleshooting
 
 **Problem**: Emoji appear as blank squares or missing glyphs
 
 **Solutions**:
-  - Ensure you're using a font that includes emoji glyphs (e.g., Noto
-    Emoji)
+  - Ensure you're using a font that includes emoji glyphs (e.g., Noto Emoji)
   - Verify the font file path is correct in `AddUTF8Font()`
-  - Check that the emoji you're using are in the BMP range (U+2000-U+2FFF)
-  - Modern emoji (U+1F300+) are not supported due to CMAP format 4
-    limitations
+  - For modern emoji (U+1F300+), ensure your font includes CMAP Format 12
+  - Check that the font file includes the specific emoji glyphs you're trying to render
 
 **Problem**: Font file not found error
 
@@ -303,23 +301,24 @@ will appear as outlined or filled shapes, depending on the font design.
 **Problem**: Some emoji render, others don't
 
 **Solutions**:
-  - This is expected behavior. Only BMP emoji (U+2000-U+2FFF) are supported
-  - Check the Unicode code point of non-rendering emoji. If they're above
-    U+FFFF, they're in the supplementary plane and won't render
-  - Use a Unicode character lookup tool to find BMP alternatives
+  - Check if your font includes CMAP Format 12 for supplementary plane support
+  - Verify that the font includes glyphs for the specific emoji you're trying to render
+  - Not all fonts include all emoji characters; try using Noto Emoji which has
+    comprehensive coverage
+  - Use a Unicode character lookup tool to verify the emoji code points
 
 ### Unicode Range Reference
 
 For reference, here are the Unicode ranges and their support status:
 
-  - **U+0000 to U+FFFF** (BMP): Supported via CMAP format 4
-  - **U+2000 to U+2FFF** (General Punctuation, Symbols): Full emoji support
-  - **U+1F300 to U+1F9FF** (Supplementary Plane): Not supported
-  - **U+10000+** (Supplementary Planes): Not supported
+  - **U+0000 to U+FFFF** (BMP): Fully supported via CMAP Format 4 or 12
+  - **U+2000 to U+2FFF** (General Punctuation, Symbols): Full support
+  - **U+1F300 to U+1F9FF** (Emoji & Pictographs): Supported with CMAP Format 12
+  - **U+10000 to U+10FFFF** (Supplementary Planes): Supported with CMAP Format 12
 
 To check if a specific emoji is supported, look up its Unicode code point.
-If it falls within U+0000 to U+FFFF (and your font includes it), it should
-render correctly.
+If your font includes CMAP Format 12 and has the glyph, it should render
+correctly across the full Unicode range.
 
 ## Related Packages
 

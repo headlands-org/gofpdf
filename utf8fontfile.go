@@ -31,9 +31,6 @@ const symbolContinue = 1 << 5
 const symbolAllScale = 1 << 6
 const symbol2x2 = 1 << 7
 
-// CID map Init
-const toUnicode = "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo\n<</Registry (Adobe)\n/Ordering (UCS)\n/Supplement 0\n>> def\n/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n1 beginbfrange\n<0000> <FFFF> <0000>\nendbfrange\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend"
-
 type utf8FontFile struct {
 	fileReader           *fileReader
 	LastRune             int
@@ -55,6 +52,7 @@ type utf8FontFile struct {
 	DefaultWidth         float64
 	symbolData           map[int]map[string][]int
 	CodeSymbolDictionary map[int]int
+	ToUnicodeCMap        string // Dynamic ToUnicode CMap for PDF embedding
 }
 
 type tableDescription struct {
@@ -456,9 +454,10 @@ func (utf *utf8FontFile) parseCMAPTable(format int) int {
 		coded := utf.readUint16()
 		position := utf.readUint32()
 		oldReaderPosition := utf.fileReader.readerPosition
-		if (system == 3 && coded == 1) || system == 0 { // Microsoft, Unicode
+		// Accept both Format 4 (BMP, encoding ID 1) and Format 12 (full Unicode, encoding ID 10)
+		if (system == 3 && (coded == 1 || coded == 10)) || system == 0 { // Microsoft, Unicode
 			format = utf.getUint16(cmapPosition + position)
-			if format == 4 {
+			if format == 4 || format == 12 {
 				if cidCMAPPosition == 0 {
 					cidCMAPPosition = cmapPosition + position
 				}
@@ -504,9 +503,10 @@ func (utf *utf8FontFile) generateCMAP() map[int][]int {
 		coder := utf.readUint16()
 		position := utf.readUint32()
 		oldPosition := utf.fileReader.readerPosition
-		if (system == 3 && coder == 1) || system == 0 {
+		// Accept both Format 4 (BMP, encoding ID 1) and Format 12 (full Unicode, encoding ID 10)
+		if (system == 3 && (coder == 1 || coder == 10)) || system == 0 {
 			format := utf.getUint16(cmapPosition + position)
-			if format == 4 {
+			if format == 4 || format == 12 {
 				runeCmapPosition = cmapPosition + position
 				break
 			}
@@ -568,76 +568,34 @@ func (utf *utf8FontFile) parseSymbols(usedRunes map[int]int) (map[int]int, map[i
 }
 
 func (utf *utf8FontFile) generateCMAPTable(cidSymbolPairCollection map[int]int, numSymbols int) []byte {
-	cidSymbolPairCollectionKeys := keySortInt(cidSymbolPairCollection)
-	cidID := 0
-	cidArray := make(map[int][]int)
-	prevCid := -2
-	prevSymbol := -1
-	for _, cid := range cidSymbolPairCollectionKeys {
-		// CMAP format 4 is limited to BMP (U+0000 to U+FFFF)
-		// Skip codepoints beyond U+FFFF as they cannot be represented in format 4
-		if cid > 0xFFFF {
-			continue
-		}
-		if cid == (prevCid+1) && cidSymbolPairCollection[cid] == (prevSymbol+1) {
-			if n, OK := cidArray[cidID]; !OK || n == nil {
-				cidArray[cidID] = make([]int, 0)
-			}
-			cidArray[cidID] = append(cidArray[cidID], cidSymbolPairCollection[cid])
-		} else {
-			cidID = cid
-			cidArray[cidID] = make([]int, 0)
-			cidArray[cidID] = append(cidArray[cidID], cidSymbolPairCollection[cid])
-		}
-		prevCid = cid
-		prevSymbol = cidSymbolPairCollection[cid]
-	}
-	cidArrayKeys := keySortArrayRangeMap(cidArray)
-	segCount := len(cidArray) + 1
+	// Build optimized cmap groups using Format 12
+	groups := buildCmapGroups(cidSymbolPairCollection)
 
-	searchRange := 1
-	entrySelector := 0
-	for searchRange*2 <= segCount {
-		searchRange = searchRange * 2
-		entrySelector = entrySelector + 1
-	}
-	searchRange = searchRange * 2
-	rangeShift := segCount*2 - searchRange
-	length := 16 + (8 * segCount) + (numSymbols + 1)
-	cmap := []int{0, 1, 3, 1, 0, 12, 4, length, 0, segCount * 2, searchRange, entrySelector, rangeShift}
+	// Build CMAP table directory header
+	// Version: 0, numTables: 1
+	cmap := make([]byte, 0)
+	cmap = append(cmap, packUint16(0)...)    // version
+	cmap = append(cmap, packUint16(1)...)    // numTables
 
-	for _, start := range cidArrayKeys {
-		endCode := start + (len(cidArray[start]) - 1)
-		cmap = append(cmap, endCode)
-	}
-	cmap = append(cmap, 0xFFFF)
-	cmap = append(cmap, 0)
+	// Platform ID: 3 (Windows), Encoding ID: 10 (Unicode full repertoire)
+	cmap = append(cmap, packUint16(3)...)    // platformID
+	cmap = append(cmap, packUint16(10)...)   // encodingID (changed from 1 to 10 for full Unicode)
 
-	for _, cidKey := range cidArrayKeys {
-		cmap = append(cmap, cidKey)
-	}
-	cmap = append(cmap, 0xFFFF)
-	for _, cidKey := range cidArrayKeys {
-		idDelta := -(cidKey - cidArray[cidKey][0])
-		cmap = append(cmap, idDelta)
-	}
-	cmap = append(cmap, 1)
-	for range cidArray {
-		cmap = append(cmap, 0)
+	// Offset to subtable: 12 bytes (from start of CMAP table)
+	cmap = append(cmap, packUint32(12)...)   // offset
 
+	// Generate Format 12 subtable header
+	header := writeCmapFormat12Header(uint32(len(groups)))
+	cmap = append(cmap, header...)
+
+	// Write each group: startCharCode, endCharCode, startGlyphID (all uint32)
+	for _, group := range groups {
+		cmap = append(cmap, packUint32(int(group.startCharCode))...)
+		cmap = append(cmap, packUint32(int(group.endCharCode))...)
+		cmap = append(cmap, packUint32(int(group.startGlyphID))...)
 	}
-	cmap = append(cmap, 0)
-	for _, start := range cidArrayKeys {
-		for _, glidx := range cidArray[start] {
-			cmap = append(cmap, glidx)
-		}
-	}
-	cmap = append(cmap, 0)
-	cmapstr := make([]byte, 0)
-	for _, cm := range cmap {
-		cmapstr = append(cmapstr, packUint16(cm)...)
-	}
-	return cmapstr
+
+	return cmap
 }
 
 //GenerateCutFont fill utf8FontFile from .utf file, only with runes from usedRunes
@@ -676,6 +634,9 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 	utf.parseLOCATable(LocaFormat, numSymbols)
 
 	cidSymbolPairCollection, symbolArray, symbolCollection, symbolCollectionKeys := utf.parseSymbols(usedRunes)
+
+	// Generate dynamic ToUnicode CMap based on the actual used runes
+	utf.ToUnicodeCMap = generateToUnicodeCMap(usedRunes)
 
 	metricsCount = len(symbolCollection)
 	numSymbols = metricsCount
@@ -922,55 +883,127 @@ func (utf *utf8FontFile) parseLOCATable(format, numSymbols int) {
 	}
 }
 
-func (utf *utf8FontFile) generateSCCSDictionaries(runeCmapPosition int, symbolCharDictionary map[int][]int, charSymbolDictionary map[int]int) {
-	maxRune := 0
-	utf.seek(runeCmapPosition + 2)
-	size := utf.readUint16()
-	rim := runeCmapPosition + size
+func (utf *utf8FontFile) parseCmapFormat12(offset int) (map[int][]int, map[int]int) {
+	symbolCharDictionary := make(map[int][]int)
+	charSymbolDictionary := make(map[int]int)
+
+	// Seek to the start of Format 12 table
+	utf.seek(offset)
+
+	// Read Format 12 header
+	format := utf.readUint16()
+	if format != 12 {
+		fmt.Printf("Expected CMAP format 12, got %d\n", format)
+		return symbolCharDictionary, charSymbolDictionary
+	}
+
+	// Skip reserved field (uint16)
 	utf.skip(2)
 
-	segmentSize := utf.readUint16() / 2
-	utf.skip(6)
-	completers := make([]int, 0)
-	for i := 0; i < segmentSize; i++ {
-		completers = append(completers, utf.readUint16())
+	// Read length (uint32)
+	length := utf.readUint32()
+
+	// Read language (uint32)
+	_ = utf.readUint32()
+
+	// Read numGroups (uint32)
+	numGroups := utf.readUint32()
+
+	// Validate length
+	expectedLength := 16 + 12*numGroups
+	if length != expectedLength {
+		fmt.Printf("Invalid CMAP Format 12 length: got %d, expected %d\n", length, expectedLength)
+		return symbolCharDictionary, charSymbolDictionary
 	}
-	utf.skip(2)
-	beginners := make([]int, 0)
-	for i := 0; i < segmentSize; i++ {
-		beginners = append(beginners, utf.readUint16())
+
+	// Parse each group
+	for i := 0; i < numGroups; i++ {
+		startCharCode := utf.readUint32()
+		endCharCode := utf.readUint32()
+		startGlyphID := utf.readUint32()
+
+		// For each character in the range
+		for charCode := startCharCode; charCode <= endCharCode; charCode++ {
+			// Calculate glyph ID
+			glyphID := startGlyphID + (charCode - startCharCode)
+
+			// Add to dictionaries
+			charSymbolDictionary[charCode] = glyphID
+			symbolCharDictionary[glyphID] = append(symbolCharDictionary[glyphID], charCode)
+		}
 	}
-	sizes := make([]int, 0)
-	for i := 0; i < segmentSize; i++ {
-		sizes = append(sizes, int(utf.readInt16()))
-	}
-	readerPositionStart := utf.fileReader.readerPosition
-	positions := make([]int, 0)
-	for i := 0; i < segmentSize; i++ {
-		positions = append(positions, utf.readUint16())
-	}
-	var symbol int
-	for n := 0; n < segmentSize; n++ {
-		completePosition := completers[n] + 1
-		for char := beginners[n]; char < completePosition; char++ {
-			if positions[n] == 0 {
-				symbol = (char + sizes[n]) & 0xFFFF
-			} else {
-				position := (char-beginners[n])*2 + positions[n]
-				position = int(readerPositionStart) + 2*n + position
-				if position >= rim {
-					symbol = 0
+
+	return symbolCharDictionary, charSymbolDictionary
+}
+
+func (utf *utf8FontFile) generateSCCSDictionaries(runeCmapPosition int, symbolCharDictionary map[int][]int, charSymbolDictionary map[int]int) {
+	// Detect CMAP format (4 or 12) from table header
+	format := utf.getUint16(runeCmapPosition)
+
+	if format == 12 {
+		// Format 12: Call parseCmapFormat12 and merge results
+		symbolCharDict, charSymbolDict := utf.parseCmapFormat12(runeCmapPosition)
+
+		// Merge the results into the passed-in dictionaries
+		for char, symbol := range charSymbolDict {
+			charSymbolDictionary[char] = symbol
+		}
+		for symbol, chars := range symbolCharDict {
+			symbolCharDictionary[symbol] = append(symbolCharDictionary[symbol], chars...)
+		}
+	} else if format == 4 {
+		// Format 4: Use existing parsing logic
+		maxRune := 0
+		utf.seek(runeCmapPosition + 2)
+		size := utf.readUint16()
+		rim := runeCmapPosition + size
+		utf.skip(2)
+
+		segmentSize := utf.readUint16() / 2
+		utf.skip(6)
+		completers := make([]int, 0)
+		for i := 0; i < segmentSize; i++ {
+			completers = append(completers, utf.readUint16())
+		}
+		utf.skip(2)
+		beginners := make([]int, 0)
+		for i := 0; i < segmentSize; i++ {
+			beginners = append(beginners, utf.readUint16())
+		}
+		sizes := make([]int, 0)
+		for i := 0; i < segmentSize; i++ {
+			sizes = append(sizes, int(utf.readInt16()))
+		}
+		readerPositionStart := utf.fileReader.readerPosition
+		positions := make([]int, 0)
+		for i := 0; i < segmentSize; i++ {
+			positions = append(positions, utf.readUint16())
+		}
+		var symbol int
+		for n := 0; n < segmentSize; n++ {
+			completePosition := completers[n] + 1
+			for char := beginners[n]; char < completePosition; char++ {
+				if positions[n] == 0 {
+					symbol = (char + sizes[n]) & 0xFFFF
 				} else {
-					symbol = utf.getUint16(position)
-					if symbol != 0 {
-						symbol = (symbol + sizes[n]) & 0xFFFF
+					position := (char-beginners[n])*2 + positions[n]
+					position = int(readerPositionStart) + 2*n + position
+					if position >= rim {
+						symbol = 0
+					} else {
+						symbol = utf.getUint16(position)
+						if symbol != 0 {
+							symbol = (symbol + sizes[n]) & 0xFFFF
+						}
 					}
 				}
+				charSymbolDictionary[char] = symbol
+				maxRune = max(char, maxRune)
+				symbolCharDictionary[symbol] = append(symbolCharDictionary[symbol], char)
 			}
-			charSymbolDictionary[char] = symbol
-			maxRune = max(char, maxRune)
-			symbolCharDictionary[symbol] = append(symbolCharDictionary[symbol], char)
 		}
+	} else {
+		fmt.Printf("Unsupported CMAP format: %d\n", format)
 	}
 }
 
@@ -1150,4 +1183,223 @@ func UTF8CutFont(inBuf []byte, cutset string) (outBuf []byte) {
 	}
 	outBuf = f.GenerateCutFont(runes)
 	return
+}
+
+// cmapGroup represents a sequential character range mapping in CMAP Format 12.
+// Format 12 uses groups to efficiently map character codes to glyph IDs.
+type cmapGroup struct {
+	startCharCode uint32 // First character code in this group
+	endCharCode   uint32 // Last character code in this group
+	startGlyphID  uint32 // Glyph ID for startCharCode (subsequent IDs are sequential)
+}
+
+// buildCmapGroups creates optimized sequential groups from a character-to-glyph mapping.
+// It combines consecutive character codes with consecutive glyph IDs into single groups
+// to minimize the number of groups in the CMAP table.
+func buildCmapGroups(cidToGlyph map[int]int) []cmapGroup {
+	if len(cidToGlyph) == 0 {
+		return []cmapGroup{}
+	}
+
+	// Get sorted list of character codes
+	cids := make([]int, 0, len(cidToGlyph))
+	for cid := range cidToGlyph {
+		cids = append(cids, cid)
+	}
+	sort.Ints(cids)
+
+	groups := make([]cmapGroup, 0)
+
+	// Start first group
+	startCid := cids[0]
+	endCid := cids[0]
+	startGid := cidToGlyph[cids[0]]
+
+	for i := 1; i < len(cids); i++ {
+		cid := cids[i]
+		gid := cidToGlyph[cid]
+
+		// Check if this character continues the current group
+		// (consecutive character codes with consecutive glyph IDs)
+		if cid == endCid+1 && gid == cidToGlyph[endCid]+1 {
+			endCid = cid
+		} else {
+			// End current group and start a new one
+			groups = append(groups, cmapGroup{
+				startCharCode: uint32(startCid),
+				endCharCode:   uint32(endCid),
+				startGlyphID:  uint32(startGid),
+			})
+			startCid = cid
+			endCid = cid
+			startGid = gid
+		}
+	}
+
+	// Add the final group
+	groups = append(groups, cmapGroup{
+		startCharCode: uint32(startCid),
+		endCharCode:   uint32(endCid),
+		startGlyphID:  uint32(startGid),
+	})
+
+	return groups
+}
+
+// writeCmapFormat12Header generates the 16-byte header for a CMAP Format 12 table.
+// Format 12 header structure (all big-endian):
+//   - format (uint16): 12
+//   - reserved (uint16): 0
+//   - length (uint32): total table size in bytes (16 + 12*numGroups)
+//   - language (uint32): 0 (language independent)
+//   - numGroups (uint32): number of sequential map groups
+func writeCmapFormat12Header(numGroups uint32) []byte {
+	header := make([]byte, 0, 16)
+
+	// Format: 12 (uint16)
+	header = append(header, packUint16(12)...)
+
+	// Reserved: 0 (uint16)
+	header = append(header, packUint16(0)...)
+
+	// Length: 16 + 12*numGroups (uint32)
+	length := int(16 + 12*numGroups)
+	header = append(header, packUint32(length)...)
+
+	// Language: 0 (uint32)
+	header = append(header, packUint32(0)...)
+
+	// NumGroups (uint32)
+	header = append(header, packUint32(int(numGroups))...)
+
+	return header
+}
+
+// generateToUnicodeCMap creates a dynamic ToUnicode CMap based on the actual used runes.
+// This function generates a CMap that maps character codes (CIDs) to Unicode values.
+// It supports both 2-byte (BMP) and 4-byte (supplementary plane) character codes.
+//
+// The function detects the maximum character code to determine the codespace range:
+// - If max <= 0xFFFF: uses 2-byte codespace <0000> <FFFF>
+// - If max > 0xFFFF: uses 4-byte codespace <00000000> <0010FFFF>
+//
+// For efficiency, consecutive character codes are combined into ranges using bfrange.
+// Identity mapping is used (CID == Unicode value).
+func generateToUnicodeCMap(usedRunes map[int]int) string {
+	if len(usedRunes) == 0 {
+		// Return minimal valid CMap for empty input
+		return `/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo
+<</Registry (Adobe)
+/Ordering (UCS)
+/Supplement 0
+>> def
+/CMapName /Adobe-Identity-UCS def
+/CMapType 2 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+0 beginbfrange
+endbfrange
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end`
+	}
+
+	// Find maximum character code to determine codespace range
+	maxCode := 0
+	for _, code := range usedRunes {
+		if code > maxCode {
+			maxCode = code
+		}
+	}
+
+	// Determine if we need 4-byte or 2-byte format
+	use4Byte := maxCode > 0xFFFF
+
+	// Build sorted list of character codes
+	codes := make([]int, 0, len(usedRunes))
+	for _, code := range usedRunes {
+		codes = append(codes, code)
+	}
+	sort.Ints(codes)
+
+	// Build bfrange entries by grouping consecutive codes
+	type rangeEntry struct {
+		start int
+		end   int
+	}
+	ranges := make([]rangeEntry, 0)
+
+	if len(codes) > 0 {
+		rangeStart := codes[0]
+		rangeEnd := codes[0]
+
+		for i := 1; i < len(codes); i++ {
+			if codes[i] == rangeEnd+1 {
+				// Extend current range
+				rangeEnd = codes[i]
+			} else {
+				// Save current range and start new one
+				ranges = append(ranges, rangeEntry{start: rangeStart, end: rangeEnd})
+				rangeStart = codes[i]
+				rangeEnd = codes[i]
+			}
+		}
+		// Add final range
+		ranges = append(ranges, rangeEntry{start: rangeStart, end: rangeEnd})
+	}
+
+	// Build CMap string
+	var cmap bytes.Buffer
+
+	// Header (same for all CMaps)
+	cmap.WriteString(`/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo
+<</Registry (Adobe)
+/Ordering (UCS)
+/Supplement 0
+>> def
+/CMapName /Adobe-Identity-UCS def
+/CMapType 2 def
+`)
+
+	// Codespace range
+	cmap.WriteString("1 begincodespacerange\n")
+	if use4Byte {
+		cmap.WriteString("<00000000> <0010FFFF>\n")
+	} else {
+		cmap.WriteString("<0000> <FFFF>\n")
+	}
+	cmap.WriteString("endcodespacerange\n")
+
+	// bfrange entries
+	if len(ranges) > 0 {
+		cmap.WriteString(fmt.Sprintf("%d beginbfrange\n", len(ranges)))
+		for _, r := range ranges {
+			if use4Byte {
+				// 4-byte format: <XXXXXXXX> <YYYYYYYY> <ZZZZZZZZ>
+				cmap.WriteString(fmt.Sprintf("<%08X> <%08X> <%08X>\n", r.start, r.end, r.start))
+			} else {
+				// 2-byte format: <XXXX> <YYYY> <ZZZZ>
+				cmap.WriteString(fmt.Sprintf("<%04X> <%04X> <%04X>\n", r.start, r.end, r.start))
+			}
+		}
+		cmap.WriteString("endbfrange\n")
+	} else {
+		cmap.WriteString("0 beginbfrange\nendbfrange\n")
+	}
+
+	// Footer
+	cmap.WriteString(`endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end`)
+
+	return cmap.String()
 }

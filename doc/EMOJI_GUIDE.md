@@ -5,9 +5,10 @@
 - [Prerequisites](#prerequisites)
 - [Font Installation](#font-installation)
 - [Basic Usage](#basic-usage)
+- [Modern Emoji Support](#modern-emoji-support)
 - [Advanced Usage](#advanced-usage)
 - [Migration Guide](#migration-guide)
-- [Understanding Limitations](#understanding-limitations)
+- [Understanding Unicode Support](#understanding-unicode-support)
 - [Compatible Emoji Fonts](#compatible-emoji-fonts)
 - [Best Practices](#best-practices)
 - [Troubleshooting](#troubleshooting)
@@ -20,14 +21,15 @@
 gofpdf now supports emoji and extended Unicode characters through proper grapheme cluster handling and full 4-byte UTF-8 sequence support. This guide will help you integrate emoji into your existing PDF generation workflows.
 
 ### What's Supported
-- BMP (Basic Multilingual Plane) emoji: U+2000-U+2FFF range
-- Grapheme clusters: Emoji with skin tone modifiers, variation selectors
-- ZWJ (Zero-Width Joiner) sequences: Family emoji, flag sequences
-- Monochrome emoji rendering via TrueType fonts
+- **Full Unicode emoji support**: U+0000 to U+10FFFF (includes all modern emoji)
+- **BMP emoji**: U+2000-U+2FFF range (☀ ☁ ❤ ⭐)
+- **Modern emoji**: U+1F300-U+1F9FF range (😀 🎉 🚀 💯)
+- **Grapheme clusters**: Emoji with skin tone modifiers, variation selectors
+- **ZWJ (Zero-Width Joiner) sequences**: Family emoji, flag sequences
+- **Monochrome emoji rendering** via TrueType fonts
 
 ### What's Not Supported (Yet)
 - Color emoji (requires Type 3 fonts or image embedding)
-- Supplementary plane emoji beyond CMAP format 4 limitations
 - Complex script shaping (Arabic ligatures, Indic scripts)
 
 ---
@@ -40,10 +42,12 @@ gofpdf now supports emoji and extended Unicode characters through proper graphem
 - **Dependencies**: `github.com/rivo/uniseg` (automatically installed)
 
 ### Font Requirements
-You need a TrueType font that includes emoji glyphs. The recommended fonts are:
-- **Noto Emoji** (recommended): Comprehensive, open-source, monochrome
-- **Symbola**: Good Unicode coverage, includes many symbols
-- **Unifont**: Complete BMP coverage, bitmap style
+You need a TrueType font that includes emoji glyphs **with CMAP Format 12 support** for modern emoji. The recommended fonts are:
+- **Noto Emoji** (recommended): Comprehensive, open-source, monochrome, **Format 12 support**
+- **Symbola**: Good Unicode coverage, includes many symbols, **Format 12 support**
+- **Unifont**: Complete BMP coverage, bitmap style, Format 12 support
+
+**Important**: For modern emoji (😀 🎉 🚀) to work, your font must have a CMAP Format 12 table. Fonts with only Format 4 will be limited to BMP emoji (☀ ☁ ❤).
 
 ---
 
@@ -139,14 +143,18 @@ func main() {
     // Set emoji font
     pdf.SetFont("notoemoji", "", 16)
 
-    // Render BMP emoji (these work with CMAP format 4)
+    // Render BMP emoji (work with CMAP Format 4 and Format 12)
     pdf.Cell(0, 10, "Weather: \u2600 \u2601 \u2614 \u26C4") // ☀ ☁ ☂ ⛄
     pdf.Ln(10)
 
     pdf.Cell(0, 10, "Symbols: \u2764 \u2B50 \u2714 \u2718") // ❤ ⭐ ✔ ✘
     pdf.Ln(10)
 
-    pdf.Cell(0, 10, "Hands: \u270B \u270A \u261D") // ✋ ✊ ☝
+    // Render modern emoji (requires CMAP Format 12)
+    pdf.Cell(0, 10, "Modern: \U0001F600 \U0001F389 \U0001F680") // 😀 🎉 🚀
+    pdf.Ln(10)
+
+    pdf.Cell(0, 10, "More: \U0001F44D \U0001F4AF \U0001F525") // 👍 💯 🔥
     pdf.Ln(10)
 
     err := pdf.OutputFileAndClose("emoji_basic.pdf")
@@ -182,6 +190,154 @@ func mixedContent() {
     pdf.OutputFileAndClose("mixed_content.pdf")
 }
 ```
+
+---
+
+## Modern Emoji Support
+
+### What Changed: CMAP Format 12
+
+gofpdf now supports **CMAP Format 12**, enabling the full Unicode range (U+0000 to U+10FFFF). This unlocks modern emoji that were previously unavailable.
+
+#### Technical Overview
+
+**CMAP Format 4 (Legacy)**
+- Supports: Basic Multilingual Plane only (U+0000-U+FFFF)
+- Character encoding: 16-bit
+- Emoji range: Limited to ☀ ☁ ❤ ⭐ and similar BMP symbols
+- Still supported for backward compatibility
+
+**CMAP Format 12 (Modern)**
+- Supports: Full Unicode range (U+0000-U+10FFFF)
+- Character encoding: 32-bit
+- Emoji range: All modern emoji including 😀 🎉 🚀 💯 🔥
+- Automatically detected and used when available
+- More efficient for supplementary plane characters
+
+**How It Works**
+1. gofpdf detects the font's CMAP table format during font loading
+2. If Format 12 is present (PlatformID=3, EncodingID=10), it's used
+3. If only Format 4 is present, falls back to BMP-only mode
+4. ToUnicode CMap is dynamically generated based on actual characters used
+5. CIDToGIDMap uses identity mapping for supplementary plane efficiency
+
+### Using Modern Emoji
+
+```go
+package main
+
+import (
+    "github.com/phpdave11/gofpdf"
+)
+
+func modernEmoji() {
+    pdf := gofpdf.New("P", "mm", "A4", "")
+    pdf.AddPage()
+
+    // Add emoji font with Format 12 support (e.g., Noto Emoji)
+    pdf.AddUTF8Font("notoemoji", "", "NotoEmoji-Regular.ttf")
+    pdf.SetFont("notoemoji", "", 16)
+
+    // Modern emoji faces
+    pdf.Cell(0, 10, "\U0001F600 \U0001F603 \U0001F604 \U0001F601") // 😀 😃 😄 😁
+    pdf.Ln(8)
+
+    // Celebration emoji
+    pdf.Cell(0, 10, "\U0001F389 \U0001F38A \U0001F38B \U0001F38D") // 🎉 🎊 🎋 🎍
+    pdf.Ln(8)
+
+    // Objects and symbols
+    pdf.Cell(0, 10, "\U0001F680 \U0001F6A0 \U0001F697 \U0001F6B2") // 🚀 🚠 🚗 🚲
+    pdf.Ln(8)
+
+    // Popular emoji
+    pdf.Cell(0, 10, "\U0001F525 \U0001F4AF \U0001F44D \U0001F44F") // 🔥 💯 👍 👏
+    pdf.Ln(8)
+
+    pdf.OutputFileAndClose("modern_emoji.pdf")
+}
+```
+
+### Emoji with Skin Tone Modifiers
+
+Skin tone modifiers (U+1F3FB-U+1F3FF) work with Format 12:
+
+```go
+func emojiWithSkinTones() {
+    pdf := gofpdf.New("P", "mm", "A4", "")
+    pdf.AddPage()
+    pdf.AddUTF8Font("notoemoji", "", "NotoEmoji-Regular.ttf")
+    pdf.SetFont("notoemoji", "", 16)
+
+    // Thumbs up with different skin tones
+    pdf.Cell(0, 10, "Thumbs up:")
+    pdf.Ln(8)
+    pdf.Cell(0, 10, "\U0001F44D") // 👍 (default)
+    pdf.Ln(6)
+    pdf.Cell(0, 10, "\U0001F44D\U0001F3FB") // 👍🏻 (light)
+    pdf.Ln(6)
+    pdf.Cell(0, 10, "\U0001F44D\U0001F3FD") // 👍🏽 (medium)
+    pdf.Ln(6)
+    pdf.Cell(0, 10, "\U0001F44D\U0001F3FF") // 👍🏿 (dark)
+
+    pdf.OutputFileAndClose("emoji_skin_tones.pdf")
+}
+```
+
+**Note**: Skin tone modifiers are grapheme clusters (multiple codepoints rendered as one character). gofpdf handles these automatically using the `github.com/rivo/uniseg` library.
+
+### Mixed BMP and Modern Emoji
+
+You can freely mix BMP emoji and modern emoji in the same document:
+
+```go
+func mixedEmoji() {
+    pdf := gofpdf.New("P", "mm", "A4", "")
+    pdf.AddPage()
+    pdf.AddUTF8Font("notoemoji", "", "NotoEmoji-Regular.ttf")
+    pdf.SetFont("notoemoji", "", 14)
+
+    // BMP symbols
+    pdf.Write(5, "Classic: \u2600 \u2764 \u2B50 ")
+    pdf.Ln(8)
+
+    // Modern emoji
+    pdf.Write(5, "Modern: \U0001F600 \U0001F389 \U0001F680 ")
+    pdf.Ln(8)
+
+    // Mixed in same line
+    pdf.Write(5, "Mixed: \u2714 \U0001F44D \u2718 \U0001F44E")
+
+    pdf.OutputFileAndClose("mixed_emoji.pdf")
+}
+```
+
+### Checking Font Compatibility
+
+Not all fonts support Format 12. Here's how to verify:
+
+```bash
+# Linux: Use ttfdump to check CMAP tables
+ttfdump -t cmap NotoEmoji-Regular.ttf | grep "Format 12"
+
+# macOS: Use ftdump (from freetype)
+ftdump NotoEmoji-Regular.ttf | grep "format 12"
+
+# Or use online tools: https://fontdrop.info/
+# Upload font and check "cmap" table for Format 12 (PlatformID 3, EncodingID 10)
+```
+
+**Known Fonts with Format 12 Support:**
+- Noto Emoji (recommended) ✓
+- Symbola ✓
+- Noto Sans ✓
+- Noto Serif ✓
+- Apple Color Emoji ✓ (but color not supported by gofpdf)
+- Segoe UI Emoji ✓ (Windows)
+
+**Fonts Limited to Format 4:**
+- DejaVu Sans (BMP only)
+- Some older emoji fonts
 
 ---
 
@@ -373,15 +529,15 @@ func statusReportWithEmoji() {
 
 ---
 
-## Understanding Limitations
+## Understanding Unicode Support
 
 ### CMAP Format 4 vs Format 12
 
-gofpdf currently supports **CMAP format 4**, which covers the Basic Multilingual Plane (BMP, U+0000-U+FFFF). This format has limitations:
+gofpdf supports **both CMAP Format 4 and Format 12**, providing comprehensive Unicode coverage:
 
-#### Supported Emoji (BMP Range)
+#### BMP Emoji (Format 4 and Format 12)
 
-These emoji work perfectly with current implementation:
+These emoji work with both Format 4 and Format 12 fonts:
 
 **Weather & Nature**
 - ☀ (U+2600) - Sun
@@ -412,39 +568,75 @@ These emoji work perfectly with current implementation:
 - ☝ (U+261D) - Pointing up
 - ✌ (U+270C) - Victory
 
-#### Unsupported Emoji (Supplementary Plane)
+#### Modern Emoji (Requires Format 12)
 
-These emoji are beyond U+FFFF and currently don't work:
+These emoji require fonts with CMAP Format 12 support:
 
 **Emoticons (U+1F600-U+1F64F)**
 - 😀 (U+1F600) - Grinning face
 - 😃 (U+1F603) - Grinning face with big eyes
 - 😄 (U+1F604) - Grinning face with smiling eyes
+- 😁 (U+1F601) - Beaming face
+- 👍 (U+1F44D) - Thumbs up
+- 👎 (U+1F44E) - Thumbs down
 
 **Symbols & Objects (U+1F300-U+1F5FF)**
 - 🌍 (U+1F30D) - Earth
 - 🔥 (U+1F525) - Fire
 - 💯 (U+1F4AF) - Hundred points
+- 🚀 (U+1F680) - Rocket
+- 🎉 (U+1F389) - Party popper
+- ⚡ (U+26A1) - Lightning
 
 **Food & Drink (U+1F300-U+1F5FF)**
 - 🍕 (U+1F355) - Pizza
 - 🍔 (U+1F354) - Hamburger
+- 🍰 (U+1F370) - Shortcake
 
-**Note**: Support for supplementary plane emoji (CMAP format 12) is planned for future releases.
+**Note**: If your font only has Format 4, these emoji won't render. Use fonts like Noto Emoji that include Format 12 support.
 
-### Workarounds
+### Format Detection and Fallback
+
+gofpdf automatically detects which CMAP format your font supports:
+
+```go
+// No code changes needed - automatic detection
+pdf.AddUTF8Font("notoemoji", "", "NotoEmoji-Regular.ttf")
+
+// If font has Format 12: All emoji work (BMP + modern)
+// If font has Format 4 only: Only BMP emoji work
+```
+
+**What happens with Format 4-only fonts:**
+1. Modern emoji (U+1F600+) will appear as blank spaces or boxes
+2. BMP emoji (☀ ☁ ❤) continue to work normally
+3. No errors are generated - graceful degradation
+
+### Workarounds for Format 4-Only Fonts
+
+If you must use a font without Format 12 support:
 
 1. **Use BMP alternatives**: Many concepts have BMP equivalents
    - Instead of 😀 (U+1F600), use ☺ (U+263A) - simple smiley
    - Instead of 🔥 (U+1F525), use ✦ (U+2726) - sparkle
+   - Instead of 🚀 (U+1F680), use ✈ (U+2708) - airplane
 
-2. **Image embedding**: For critical color emoji, embed as images
+2. **Upgrade to Format 12 font**: Switch to Noto Emoji or Symbola
+   ```go
+   // Old font (Format 4 only)
+   // pdf.AddUTF8Font("dejavu", "", "DejaVuSans.ttf")
+
+   // New font (Format 12 support)
+   pdf.AddUTF8Font("notoemoji", "", "NotoEmoji-Regular.ttf")
+   ```
+
+3. **Image embedding**: For critical color emoji, embed as images
    ```go
    pdf.ImageOptions("emoji_fire.png", 10, 10, 5, 5, false,
        gofpdf.ImageOptions{ImageType: "PNG"}, 0, "")
    ```
 
-3. **Unicode symbols**: Rich set of symbols in BMP range
+4. **Unicode symbols**: Rich set of symbols in BMP range
    - Arrows: ← → ↑ ↓ (U+2190-U+2193)
    - Mathematical: ∞ ≈ ≠ ± (U+221E, U+2248, U+2260, U+00B1)
    - Currency: € £ ¥ (U+20AC, U+00A3, U+00A5)
@@ -458,48 +650,56 @@ These emoji are beyond U+FFFF and currently don't work:
 #### 1. Noto Emoji (Best Overall)
 - **Provider**: Google
 - **License**: Open Font License (OFL)
-- **Coverage**: Comprehensive emoji coverage
+- **Coverage**: Comprehensive emoji coverage (BMP + supplementary plane)
+- **CMAP Format**: Format 12 ✓ (full Unicode support)
 - **Style**: Monochrome (black & white)
 - **Size**: ~400KB
 - **Download**: https://github.com/googlefonts/noto-emoji/
-- **Best for**: Production use, consistent rendering across platforms
+- **Best for**: Production use, modern emoji, consistent rendering across platforms
+- **Modern Emoji**: YES - 😀 🎉 🚀 all work
 
 #### 2. Symbola (Good Unicode Coverage)
 - **Provider**: George Douros
 - **License**: Freeware
 - **Coverage**: Excellent symbol and emoji coverage
+- **CMAP Format**: Format 12 ✓ (full Unicode support)
 - **Style**: Simple, clean design
 - **Size**: ~3MB
 - **Download**: https://fontlibrary.org/en/font/symbola
 - **Best for**: Documents needing wide Unicode symbol support
+- **Modern Emoji**: YES - 😀 🎉 🚀 all work
 - **Note**: Development ceased 2019, but still widely used
 
-#### 3. Unifont (Complete BMP)
+#### 3. Unifont (Complete Unicode)
 - **Provider**: GNU Project
 - **License**: GNU GPL v2+ with font embedding exception
-- **Coverage**: Complete Basic Multilingual Plane
+- **Coverage**: Complete Unicode (BMP + supplementary plane)
+- **CMAP Format**: Format 12 ✓ (full Unicode support)
 - **Style**: Bitmap/monospace style
 - **Size**: ~12MB
 - **Download**: http://unifoundry.com/unifont/
 - **Best for**: Technical documents, complete Unicode coverage
+- **Modern Emoji**: YES - 😀 🎉 🚀 all work
 
-#### 4. DejaVu Sans (Limited Emoji)
+#### 4. DejaVu Sans (BMP Only)
 - **Provider**: DejaVu Fonts Project
 - **License**: Free (similar to Bitstream Vera)
 - **Coverage**: Limited emoji, good general Unicode
+- **CMAP Format**: Format 4 only (BMP only)
 - **Style**: Professional sans-serif
 - **Size**: ~600KB
 - **Download**: https://dejavu-fonts.github.io/
-- **Best for**: Main text with occasional symbols
+- **Best for**: Main text with occasional BMP symbols
+- **Modern Emoji**: NO - Limited to ☀ ☁ ❤ ⭐
 
 ### Font Comparison Table
 
-| Font | Emoji Coverage | Size | BMP Only | Color | License |
-|------|----------------|------|----------|-------|---------|
-| Noto Emoji | Excellent | 400KB | ✔ | ✘ | OFL |
-| Symbola | Very Good | 3MB | ✔ | ✘ | Freeware |
-| Unifont | Complete BMP | 12MB | ✔ | ✘ | GPL v2+ |
-| DejaVu Sans | Limited | 600KB | ✔ | ✘ | Free |
+| Font | Emoji Coverage | Size | Format 12 | Modern Emoji | Color | License |
+|------|----------------|------|-----------|--------------|-------|---------|
+| Noto Emoji | Excellent | 400KB | ✓ | ✓ | ✘ | OFL |
+| Symbola | Very Good | 3MB | ✓ | ✓ | ✘ | Freeware |
+| Unifont | Complete | 12MB | ✓ | ✓ | ✘ | GPL v2+ |
+| DejaVu Sans | Limited | 600KB | ✘ | ✘ | ✘ | Free |
 
 ---
 
@@ -512,20 +712,23 @@ These emoji are beyond U+FFFF and currently don't work:
 - **For maximum compatibility**: Unifont (complete BMP coverage)
 - **For mixed documents**: DejaVu Sans (main) + Noto Emoji (emoji)
 
-### 2. BMP vs Supplementary Plane
+### 2. Modern Emoji Usage
 
-**Prefer BMP emoji when possible:**
+**Use modern emoji with Format 12 fonts:**
 ```go
-// Good: BMP emoji (works)
-pdf.Cell(10, 10, "\u2764") // ❤ heart
+// Modern emoji (requires Format 12)
+pdf.Cell(10, 10, "\U0001F600") // 😀 grinning face
+pdf.Cell(10, 10, "\U0001F389") // 🎉 party popper
+pdf.Cell(10, 10, "\U0001F680") // 🚀 rocket
 
-// Avoid: Supplementary plane (doesn't work yet)
-// pdf.Cell(10, 10, "\U0001F600") // 😀 won't render
+// BMP emoji (works with both Format 4 and 12)
+pdf.Cell(10, 10, "\u2764") // ❤ heart
+pdf.Cell(10, 10, "\u2B50") // ⭐ star
 ```
 
 **Check Unicode values:**
-- U+0000 - U+FFFF: BMP (works)
-- U+10000+: Supplementary (doesn't work yet)
+- U+0000 - U+FFFF: BMP (works with all fonts)
+- U+10000 - U+10FFFF: Supplementary (requires Format 12 font)
 
 ### 3. Font Switching Patterns
 
@@ -560,14 +763,27 @@ func TestEmojiRendering(t *testing.T) {
     pdf.AddUTF8Font("notoemoji", "", "NotoEmoji-Regular.ttf")
     pdf.SetFont("notoemoji", "", 12)
 
-    // Test various emoji categories
-    testEmoji := []string{
-        "\u2600", // Sun
-        "\u2764", // Heart
-        "\u2714", // Checkmark
+    // Test BMP emoji
+    bmpEmoji := []string{
+        "\u2600", // ☀ Sun
+        "\u2764", // ❤ Heart
+        "\u2714", // ✔ Checkmark
     }
 
-    for _, emoji := range testEmoji {
+    for _, emoji := range bmpEmoji {
+        pdf.Cell(10, 10, emoji)
+    }
+
+    pdf.Ln(10)
+
+    // Test modern emoji (requires Format 12)
+    modernEmoji := []string{
+        "\U0001F600", // 😀 Grinning face
+        "\U0001F389", // 🎉 Party popper
+        "\U0001F680", // 🚀 Rocket
+    }
+
+    for _, emoji := range modernEmoji {
         pdf.Cell(10, 10, emoji)
     }
 
@@ -604,15 +820,21 @@ func renderWithFallback(pdf *gofpdf.Fpdf, text string, emoji string) {
 
 **Use consistent Unicode notation:**
 ```go
-// Recommended: \u for BMP (4 hex digits)
-pdf.Cell(10, 10, "\u2764") // ❤
+// For BMP (4 hex digits): \uXXXX
+pdf.Cell(10, 10, "\u2764") // ❤ heart
 
-// Also valid: Literal Unicode (if editor supports)
+// For supplementary plane (8 hex digits): \UXXXXXXXX
+pdf.Cell(10, 10, "\U0001F600") // 😀 grinning face
+
+// Also valid: Literal Unicode (if editor supports UTF-8)
 pdf.Cell(10, 10, "❤")
-
-// For supplementary plane (when supported): \U (8 hex digits)
-// pdf.Cell(10, 10, "\U0001F600") // 😀 (not yet supported)
+pdf.Cell(10, 10, "😀")
 ```
+
+**Format Notes:**
+- BMP: `\u` followed by exactly 4 hex digits
+- Supplementary: `\U` followed by exactly 8 hex digits (uppercase U)
+- Leading zeros required: `\U0001F600` not `\U1F600`
 
 ### 7. Document Structure
 
@@ -663,13 +885,25 @@ func generateDocument() {
    pdf.AddUTF8Font("emoji", "", "/usr/share/fonts/truetype/noto/NotoEmoji-Regular.ttf")
    ```
 
-3. **Check Unicode range**:
+3. **Check CMAP format for modern emoji**:
    ```go
-   // This works (BMP)
+   // Modern emoji (U+1F600+) require Format 12
+   // If your font only has Format 4, use BMP alternatives
+
+   // Instead of:
+   // pdf.Cell(10, 10, "\U0001F600") // 😀 (needs Format 12)
+
+   // Use:
+   pdf.Cell(10, 10, "\u263A") // ☺ (BMP alternative)
+   ```
+
+4. **Verify Unicode range matches font capability**:
+   ```go
+   // BMP emoji (works with all fonts)
    pdf.Cell(10, 10, "\u2764") // ❤
 
-   // This doesn't work yet (supplementary plane)
-   // pdf.Cell(10, 10, "\U0001F600") // 😀
+   // Modern emoji (requires Format 12 font)
+   pdf.Cell(10, 10, "\U0001F600") // 😀
    ```
 
 ### Problem: Boxes (□) Instead of Emoji
@@ -749,6 +983,79 @@ func generateDocument() {
    pdf.RegisterImageOptions("heart", gofpdf.ImageOptions{ImageType: "PNG"})
    pdf.ImageOptions("heart.png", 10, 10, 5, 5, false,
        gofpdf.ImageOptions{}, 0, "heart")
+   ```
+
+### Problem: Modern Emoji Don't Work (Format 12 Missing)
+
+**Symptom**: Modern emoji (😀 🎉 🚀) appear as blank spaces or boxes, but BMP emoji (☀ ❤) work fine
+
+**Diagnosis**: Your font doesn't have a CMAP Format 12 table
+
+**Solutions**:
+
+1. **Verify font CMAP format**:
+   ```bash
+   # Check if font has Format 12 support
+   # Linux: Install fonttools
+   ttx -t cmap NotoEmoji-Regular.ttf
+   grep "platformID=\"3\" platEncID=\"10\"" *.ttx
+
+   # If no output, font lacks Format 12
+   ```
+
+2. **Switch to Format 12-compatible font**:
+   ```go
+   // Old: DejaVu Sans (Format 4 only)
+   // pdf.AddUTF8Font("emoji", "", "DejaVuSans.ttf")
+
+   // New: Noto Emoji (Format 12 supported)
+   pdf.AddUTF8Font("emoji", "", "NotoEmoji-Regular.ttf")
+   ```
+
+3. **Use BMP emoji alternatives**:
+   ```go
+   // Modern emoji that don't work with Format 4:
+   // "\U0001F600" // 😀
+   // "\U0001F389" // 🎉
+   // "\U0001F680" // 🚀
+
+   // BMP alternatives that work:
+   pdf.Cell(10, 10, "\u263A") // ☺ smiley
+   pdf.Cell(10, 10, "\u2728") // ✨ sparkles
+   pdf.Cell(10, 10, "\u2708") // ✈ airplane
+   ```
+
+4. **Mixed font strategy** (if you must keep current font):
+   ```go
+   // Use current font for text
+   pdf.AddUTF8Font("main", "", "DejaVuSans.ttf")
+
+   // Add Format 12 font for modern emoji
+   pdf.AddUTF8Font("emoji", "", "NotoEmoji-Regular.ttf")
+
+   // Switch fonts as needed
+   pdf.SetFont("main", "", 12)
+   pdf.Cell(30, 10, "Status: ")
+
+   pdf.SetFont("emoji", "", 12)
+   pdf.Cell(10, 10, "\U0001F680") // 🚀 now works
+   ```
+
+5. **Font compatibility matrix**:
+   ```
+   Format 12 fonts (modern emoji work):
+   - Noto Emoji        ✓
+   - Symbola           ✓
+   - Unifont           ✓
+   - Noto Sans/Serif   ✓
+   - Apple Color Emoji ✓
+   - Segoe UI Emoji    ✓
+
+   Format 4 only (BMP emoji only):
+   - DejaVu Sans       ✘
+   - Arial             ✘ (most versions)
+   - Times New Roman   ✘
+   - Helvetica         ✘
    ```
 
 ### Problem: "Invalid UTF-8" Error
@@ -984,7 +1291,9 @@ func main() {
 }
 ```
 
-### BMP Emoji Quick List
+### Emoji Quick Reference
+
+**BMP Emoji (work with all fonts):**
 ```
 Weather: ☀☁☂⛄⚡⭐
 Symbols: ❤⭐✔✘⚠⛔
@@ -994,10 +1303,26 @@ Shapes:  ■□●○◆◇
 Cards:   ♠♣♥♦
 ```
 
+**Modern Emoji (require Format 12):**
+```
+Faces:   😀😃😄😁😅😊
+Hands:   👍👎👏🙏🤝✌
+Objects: 🚀🎉💯🔥⚡✨
+Food:    🍕🍔🍰🍎🍇🍉
+Nature:  🌍🌙⭐🔥💧🌈
+```
+
 ---
 
 **Last Updated**: October 2025
-**gofpdf Version**: Latest (emoji support)
+**gofpdf Version**: Latest (CMAP Format 12 support - full Unicode range)
 **Maintained by**: gofpdf community
+
+**Recent Changes**:
+- Added CMAP Format 12 support for modern emoji (😀 🎉 🚀)
+- Full Unicode support (U+0000 - U+10FFFF)
+- Automatic format detection and fallback
+- Dynamic ToUnicode CMap generation
+- Identity CIDToGIDMap for supplementary plane efficiency
 
 For questions or issues, please visit: https://github.com/phpdave11/gofpdf
