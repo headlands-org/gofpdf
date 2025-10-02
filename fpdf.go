@@ -960,12 +960,14 @@ func (f *Fpdf) GetStringSymbolWidth(s string) int {
 	}
 	w := 0
 	if f.isCurrentUTF8 {
-		unicode := []rune(s)
-		for _, char := range unicode {
-			intChar := int(char)
-			if len(f.currentFont.Cw) >= intChar && f.currentFont.Cw[intChar] > 0 {
-				if f.currentFont.Cw[intChar] != 65535 {
-					w += f.currentFont.Cw[intChar]
+		// Use grapheme clusters for correct emoji handling
+		clusters := graphemeClusters(s)
+		for _, cluster := range clusters {
+			clusterWidth := graphemeClusterWidth(cluster, &f.currentFont)
+			if clusterWidth > 0 {
+				// Skip width 65535 (marks missing glyphs in some fonts)
+				if clusterWidth != 65535 {
+					w += clusterWidth
 				}
 			} else if f.currentFont.Desc.MissingWidth != 0 {
 				w += f.currentFont.Desc.MissingWidth
@@ -978,7 +980,7 @@ func (f *Fpdf) GetStringSymbolWidth(s string) int {
 			if ch == 0 {
 				break
 			}
-			w += f.currentFont.Cw[ch]
+			w += f.currentFont.Cw[int(ch)]
 		}
 	}
 	return w
@@ -1465,7 +1467,16 @@ func (f *Fpdf) ClipRect(x, y, w, h float64, outline bool) {
 // restore unclipped operations.
 func (f *Fpdf) ClipText(x, y float64, txtStr string, outline bool) {
 	f.clipNest++
-	f.outf("q BT %.5f %.5f Td %d Tr (%s) Tj ET", x*f.k, (f.h-y)*f.k, intIf(outline, 5, 7), f.escape(txtStr))
+	var txt2 string
+	if f.isCurrentUTF8 {
+		txt2 = f.escape(utf8toutf16(txtStr, false))
+		for _, uni := range []rune(txtStr) {
+			f.currentFont.usedRunes[int(uni)] = int(uni)
+		}
+	} else {
+		txt2 = f.escape(txtStr)
+	}
+	f.outf("q BT %.5f %.5f Td %d Tr (%s) Tj ET", x*f.k, (f.h-y)*f.k, intIf(outline, 5, 7), txt2)
 }
 
 func (f *Fpdf) clipArc(x1, y1, x2, y2, x3, y3 float64) {
@@ -2545,7 +2556,7 @@ func (f *Fpdf) SplitLines(txt []byte, w float64) [][]byte {
 	l := 0
 	for i < nb {
 		c := s[i]
-		l += cw[c]
+		l += cw[int(c)]
 		if c == ' ' || c == '\t' || c == '\n' {
 			sep = i
 		}
@@ -2609,21 +2620,21 @@ func (f *Fpdf) MultiCell(w, h float64, txtStr, borderStr, alignStr string, fill 
 	}
 	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
 	s := strings.Replace(txtStr, "\r", "", -1)
-	srune := []rune(s)
 
-	// remove extra line breaks
+	// For UTF-8 fonts, use grapheme clusters; otherwise use byte-based processing
+	var clusters []string
 	var nb int
 	if f.isCurrentUTF8 {
-		nb = len(srune)
-		for nb > 0 && srune[nb-1] == '\n' {
+		clusters = graphemeClusters(s)
+		nb = len(clusters)
+		// Remove trailing newline clusters
+		for nb > 0 && clusters[nb-1] == "\n" {
 			nb--
 		}
-		srune = srune[0:nb]
+		clusters = clusters[0:nb]
 	} else {
 		nb = len(s)
 		bytes2 := []byte(s)
-
-		// for nb > 0 && bytes2[nb-1] == '\n' {
 
 		// Prior to August 2019, if s ended with a newline, this code stripped it.
 		// After that date, to be compatible with the UTF-8 code above, *all*
@@ -2635,6 +2646,7 @@ func (f *Fpdf) MultiCell(w, h float64, txtStr, borderStr, alignStr string, fill 
 		}
 		s = s[0:nb]
 	}
+
 	// dbg("[%s]\n", s)
 	var b, b2 string
 	b = "0"
@@ -2666,14 +2678,41 @@ func (f *Fpdf) MultiCell(w, h float64, txtStr, borderStr, alignStr string, fill 
 	ns := 0
 	nl := 1
 	for i < nb {
-		// Get next character
+		// Get next character/cluster
 		var c rune
+		var cluster string
+		var clusterWidth int
+
 		if f.isCurrentUTF8 {
-			c = srune[i]
+			cluster = clusters[i]
+			// Check if cluster is a single rune for backward compatibility checks
+			runes := []rune(cluster)
+			if len(runes) == 1 {
+				c = runes[0]
+			} else {
+				c = 0 // Multi-rune cluster, not a simple character
+			}
+
+			// Calculate cluster width
+			for _, r := range cluster {
+				width, ok := cw[int(r)]
+				if !ok || width == 0 {
+					clusterWidth += f.currentFont.Desc.MissingWidth
+				} else if width != 65535 {
+					clusterWidth += width
+				}
+			}
 		} else {
 			c = rune(s[i])
+			width, ok := cw[int(c)]
+			if !ok || width == 0 {
+				clusterWidth = f.currentFont.Desc.MissingWidth
+			} else if width != 65535 {
+				clusterWidth = width
+			}
 		}
-		if c == '\n' {
+
+		if (f.isCurrentUTF8 && cluster == "\n") || (!f.isCurrentUTF8 && c == '\n') {
 			// Explicit line break
 			if f.ws > 0 {
 				f.ws = 0
@@ -2689,7 +2728,12 @@ func (f *Fpdf) MultiCell(w, h float64, txtStr, borderStr, alignStr string, fill 
 						newAlignStr = "L"
 					}
 				}
-				f.CellFormat(w, h, string(srune[j:i]), b, 2, newAlignStr, fill, 0, "")
+				// Join clusters into string
+				lineStr := ""
+				for k := j; k < i; k++ {
+					lineStr += clusters[k]
+				}
+				f.CellFormat(w, h, lineStr, b, 2, newAlignStr, fill, 0, "")
 			} else {
 				f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
 			}
@@ -2704,20 +2748,28 @@ func (f *Fpdf) MultiCell(w, h float64, txtStr, borderStr, alignStr string, fill 
 			}
 			continue
 		}
-		if c == ' ' || isChinese(c) {
+
+		// Check if we can break at this position
+		canBreak := false
+		if f.isCurrentUTF8 {
+			// Only check for breaking if it's a single-rune cluster
+			if c != 0 && (c == ' ' || isChinese(c)) {
+				canBreak = true
+			}
+		} else {
+			if c == ' ' || isChinese(c) {
+				canBreak = true
+			}
+		}
+
+		if canBreak {
 			sep = i
 			ls = l
 			ns++
 		}
-		if int(c) >= len(cw) {
-			f.err = fmt.Errorf("character outside the supported range: %s", string(c))
-			return
-		}
-		if cw[int(c)] == 0 { //Marker width 0 used for missing symbols
-			l += f.currentFont.Desc.MissingWidth
-		} else if cw[int(c)] != 65535 { //Marker width 65535 used for zero width symbols
-			l += cw[int(c)]
-		}
+
+		l += clusterWidth
+
 		if l > wmax {
 			// Automatic line break
 			if sep == -1 {
@@ -2729,7 +2781,11 @@ func (f *Fpdf) MultiCell(w, h float64, txtStr, borderStr, alignStr string, fill 
 					f.out("0 Tw")
 				}
 				if f.isCurrentUTF8 {
-					f.CellFormat(w, h, string(srune[j:i]), b, 2, alignStr, fill, 0, "")
+					lineStr := ""
+					for k := j; k < i; k++ {
+						lineStr += clusters[k]
+					}
+					f.CellFormat(w, h, lineStr, b, 2, alignStr, fill, 0, "")
 				} else {
 					f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
 				}
@@ -2743,7 +2799,11 @@ func (f *Fpdf) MultiCell(w, h float64, txtStr, borderStr, alignStr string, fill 
 					f.outf("%.3f Tw", f.ws*f.k)
 				}
 				if f.isCurrentUTF8 {
-					f.CellFormat(w, h, string(srune[j:sep]), b, 2, alignStr, fill, 0, "")
+					lineStr := ""
+					for k := j; k < sep; k++ {
+						lineStr += clusters[k]
+					}
+					f.CellFormat(w, h, lineStr, b, 2, alignStr, fill, 0, "")
 				} else {
 					f.CellFormat(w, h, s[j:sep], b, 2, alignStr, fill, 0, "")
 				}
@@ -2777,7 +2837,11 @@ func (f *Fpdf) MultiCell(w, h float64, txtStr, borderStr, alignStr string, fill 
 				alignStr = ""
 			}
 		}
-		f.CellFormat(w, h, string(srune[j:i]), b, 2, alignStr, fill, 0, "")
+		lineStr := ""
+		for k := j; k < i; k++ {
+			lineStr += clusters[k]
+		}
+		f.CellFormat(w, h, lineStr, b, 2, alignStr, fill, 0, "")
 	} else {
 		f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
 	}
@@ -2791,9 +2855,13 @@ func (f *Fpdf) write(h float64, txtStr string, link int, linkStr string) {
 	w := f.w - f.rMargin - f.x
 	wmax := (w - 2*f.cMargin) * 1000 / f.fontSize
 	s := strings.Replace(txtStr, "\r", "", -1)
+
+	// Use grapheme clusters for UTF-8 fonts
+	var clusters []string
 	var nb int
 	if f.isCurrentUTF8 {
-		nb = len([]rune(s))
+		clusters = graphemeClusters(s)
+		nb = len(clusters)
 		if nb == 1 && s == " " {
 			f.x += f.GetStringWidth(s)
 			return
@@ -2801,23 +2869,45 @@ func (f *Fpdf) write(h float64, txtStr string, link int, linkStr string) {
 	} else {
 		nb = len(s)
 	}
+
 	sep := -1
 	i := 0
 	j := 0
 	l := 0.0
 	nl := 1
 	for i < nb {
-		// Get next character
+		// Get next character/cluster
 		var c rune
+		var cluster string
+		var clusterWidth float64
+
 		if f.isCurrentUTF8 {
-			c = []rune(s)[i]
+			cluster = clusters[i]
+			// Check if cluster is a single rune for backward compatibility
+			runes := []rune(cluster)
+			if len(runes) == 1 {
+				c = runes[0]
+			} else {
+				c = 0 // Multi-rune cluster
+			}
+
+			// Calculate cluster width
+			for _, r := range cluster {
+				clusterWidth += float64(cw[int(r)])
+			}
 		} else {
 			c = rune(byte(s[i]))
+			clusterWidth = float64(cw[int(c)])
 		}
-		if c == '\n' {
+
+		if (f.isCurrentUTF8 && cluster == "\n") || (!f.isCurrentUTF8 && c == '\n') {
 			// Explicit line break
 			if f.isCurrentUTF8 {
-				f.CellFormat(w, h, string([]rune(s)[j:i]), "", 2, "", false, link, linkStr)
+				lineStr := ""
+				for k := j; k < i; k++ {
+					lineStr += clusters[k]
+				}
+				f.CellFormat(w, h, lineStr, "", 2, "", false, link, linkStr)
 			} else {
 				f.CellFormat(w, h, s[j:i], "", 2, "", false, link, linkStr)
 			}
@@ -2833,10 +2923,14 @@ func (f *Fpdf) write(h float64, txtStr string, link int, linkStr string) {
 			nl++
 			continue
 		}
-		if c == ' ' {
+
+		// Check for space separator
+		if (f.isCurrentUTF8 && c != 0 && c == ' ') || (!f.isCurrentUTF8 && c == ' ') {
 			sep = i
 		}
-		l += float64(cw[int(c)])
+
+		l += clusterWidth
+
 		if l > wmax {
 			// Automatic line break
 			if sep == -1 {
@@ -2854,13 +2948,21 @@ func (f *Fpdf) write(h float64, txtStr string, link int, linkStr string) {
 					i++
 				}
 				if f.isCurrentUTF8 {
-					f.CellFormat(w, h, string([]rune(s)[j:i]), "", 2, "", false, link, linkStr)
+					lineStr := ""
+					for k := j; k < i; k++ {
+						lineStr += clusters[k]
+					}
+					f.CellFormat(w, h, lineStr, "", 2, "", false, link, linkStr)
 				} else {
 					f.CellFormat(w, h, s[j:i], "", 2, "", false, link, linkStr)
 				}
 			} else {
 				if f.isCurrentUTF8 {
-					f.CellFormat(w, h, string([]rune(s)[j:sep]), "", 2, "", false, link, linkStr)
+					lineStr := ""
+					for k := j; k < sep; k++ {
+						lineStr += clusters[k]
+					}
+					f.CellFormat(w, h, lineStr, "", 2, "", false, link, linkStr)
 				} else {
 					f.CellFormat(w, h, s[j:sep], "", 2, "", false, link, linkStr)
 				}
@@ -2882,7 +2984,11 @@ func (f *Fpdf) write(h float64, txtStr string, link int, linkStr string) {
 	// Last chunk
 	if i != j {
 		if f.isCurrentUTF8 {
-			f.CellFormat(l/1000*f.fontSize, h, string([]rune(s)[j:]), "", 0, "", false, link, linkStr)
+			lineStr := ""
+			for k := j; k < i; k++ {
+				lineStr += clusters[k]
+			}
+			f.CellFormat(l/1000*f.fontSize, h, lineStr, "", 0, "", false, link, linkStr)
 		} else {
 			f.CellFormat(l/1000*f.fontSize, h, s[j:], "", 0, "", false, link, linkStr)
 		}
@@ -4079,7 +4185,11 @@ func (f *Fpdf) putfonts() {
 				var s fmtBuffer
 				s.WriteString("[")
 				for j := 32; j < 256; j++ {
-					s.printf("%d ", font.Cw[j])
+					if width, ok := font.Cw[j]; ok {
+						s.printf("%d ", width)
+					} else {
+						s.printf("0 ")
+					}
 				}
 				s.WriteString("]")
 				f.out(s.String())
@@ -4200,10 +4310,10 @@ func (f *Fpdf) generateCIDFontMap(font *fontDefType, LastRune int) {
 
 	// for each character
 	for cid := startCid; cid < cwLen; cid++ {
-		if font.Cw[cid] == 0x00 {
+		width, ok := font.Cw[cid]
+		if !ok || width == 0x00 {
 			continue
 		}
-		width := font.Cw[cid]
 		if width == 65535 {
 			width = 0
 		}
