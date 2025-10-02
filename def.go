@@ -712,7 +712,9 @@ type fontDefType struct {
 	DiffN        int           // Position of diff in app array, set by font loader
 	i            string        // 1-based position in font list, set by font loader, not this program
 	utf8File     *utf8FontFile // UTF-8 font
-	usedRunes    map[int]int   // Array of used runes
+	usedRunes    map[int]int   // CID -> rune mapping for glyph subsetting
+	runeToCID    map[int]int   // rune -> CID mapping for encoding
+	nextCID      int           // next assignable CID value (Type0 fonts)
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for fontDefType

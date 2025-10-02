@@ -187,7 +187,7 @@ func (utf *utf8FontFile) skip(delta int) {
 	_, _ = utf.fileReader.seek(int64(delta), 1)
 }
 
-//SeekTable position
+// SeekTable position
 func (utf *utf8FontFile) SeekTable(name string) int {
 	return utf.seekTable(name, 0)
 }
@@ -562,9 +562,7 @@ func (utf *utf8FontFile) parseSymbols(usedRunes map[int]int) (map[int]int, map[i
 	symbolCollectionKeys := keySortInt(symbolCollection)
 
 	symbolCounter := 0
-	maxRune := 0
 	for _, oldSymbolIndex := range symbolCollectionKeys {
-		maxRune = max(maxRune, symbolCollection[oldSymbolIndex])
 		symbolArray[oldSymbolIndex] = symbolCounter
 		symbolCounter++
 	}
@@ -573,7 +571,6 @@ func (utf *utf8FontFile) parseSymbols(usedRunes map[int]int) (map[int]int, map[i
 	for _, runa := range charSymbolPairCollectionKeys {
 		runeSymbolPairCollection[runa] = symbolArray[charSymbolPairCollection[runa]]
 	}
-	utf.CodeSymbolDictionary = runeSymbolPairCollection
 
 	symbolCollectionKeys = keySortInt(symbolCollection)
 	for _, oldSymbolIndex := range symbolCollectionKeys {
@@ -590,15 +587,15 @@ func (utf *utf8FontFile) generateCMAPTable(cidSymbolPairCollection map[int]int, 
 	// Build CMAP table directory header
 	// Version: 0, numTables: 1
 	cmap := make([]byte, 0)
-	cmap = append(cmap, packUint16(0)...)    // version
-	cmap = append(cmap, packUint16(1)...)    // numTables
+	cmap = append(cmap, packUint16(0)...) // version
+	cmap = append(cmap, packUint16(1)...) // numTables
 
 	// Platform ID: 3 (Windows), Encoding ID: 10 (Unicode full repertoire)
-	cmap = append(cmap, packUint16(3)...)    // platformID
-	cmap = append(cmap, packUint16(10)...)   // encodingID (changed from 1 to 10 for full Unicode)
+	cmap = append(cmap, packUint16(3)...)  // platformID
+	cmap = append(cmap, packUint16(10)...) // encodingID (changed from 1 to 10 for full Unicode)
 
 	// Offset to subtable: 12 bytes (from start of CMAP table)
-	cmap = append(cmap, packUint32(12)...)   // offset
+	cmap = append(cmap, packUint32(12)...) // offset
 
 	// Generate Format 12 subtable header
 	header := writeCmapFormat12Header(uint32(len(groups)))
@@ -614,7 +611,7 @@ func (utf *utf8FontFile) generateCMAPTable(cidSymbolPairCollection map[int]int, 
 	return cmap
 }
 
-//GenerateCutFont fill utf8FontFile from .utf file, only with runes from usedRunes
+// GenerateCutFont fill utf8FontFile from .utf file, only with runes from usedRunes
 func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 	utf.fileReader.readerPosition = 0
 	utf.symbolPosition = make([]int, 0)
@@ -649,14 +646,26 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 
 	utf.parseLOCATable(LocaFormat, numSymbols)
 
-	cidSymbolPairCollection, symbolArray, symbolCollection, symbolCollectionKeys := utf.parseSymbols(usedRunes)
+	unicodeGlyphMap, symbolArray, symbolCollection, symbolCollectionKeys := utf.parseSymbols(usedRunes)
 
-	// Generate dynamic ToUnicode CMap: invert cidSymbolPairCollection to get CID->Unicode mapping
 	cidToUnicode := make(map[int]int)
-	for unicode, cid := range cidSymbolPairCollection {
+	cidToGlyph := make(map[int]int)
+	maxCID := 0
+	for cid, unicode := range usedRunes {
+		if cid == 0 {
+			continue
+		}
 		cidToUnicode[cid] = unicode
+		if glyph, ok := unicodeGlyphMap[unicode]; ok {
+			cidToGlyph[cid] = glyph
+		}
+		if cid > maxCID {
+			maxCID = cid
+		}
 	}
 	utf.ToUnicodeCMap = generateToUnicodeCMap(cidToUnicode)
+	utf.CodeSymbolDictionary = cidToGlyph
+	utf.LastRune = maxCID
 
 	metricsCount = len(symbolCollection)
 	numSymbols = metricsCount
@@ -671,9 +680,9 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 	postTable = append(append([]byte{0x00, 0x03, 0x00, 0x00}, postTable[4:16]...), []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}...)
 	utf.setOutTable("post", postTable)
 
-	delete(cidSymbolPairCollection, 0)
+	delete(unicodeGlyphMap, 0)
 
-	utf.setOutTable("cmap", utf.generateCMAPTable(cidSymbolPairCollection, numSymbols))
+	utf.setOutTable("cmap", utf.generateCMAPTable(unicodeGlyphMap, numSymbols))
 
 	symbolData := utf.getTableData("glyf")
 
@@ -1305,9 +1314,8 @@ func writeCmapFormat12Header(numGroups uint32) []byte {
 //
 // For efficiency, consecutive character codes are combined into ranges using bfrange.
 // Identity mapping is used (CID == Unicode value).
-func generateToUnicodeCMap(usedRunes map[int]int) string {
-	if len(usedRunes) == 0 {
-		// Return minimal valid CMap for empty input
+func generateToUnicodeCMap(cidToUnicode map[int]int) string {
+	if len(cidToUnicode) == 0 {
 		return `/CIDInit /ProcSet findresource begin
 12 dict begin
 begincmap
@@ -1321,62 +1329,56 @@ begincmap
 1 begincodespacerange
 <0000> <FFFF>
 endcodespacerange
-0 beginbfrange
-endbfrange
+0 beginbfchar
+endbfchar
 endcmap
 CMapName currentdict /CMap defineresource pop
 end
 end`
 	}
 
-	// Find maximum character code to determine codespace range
-	maxCode := 0
-	for _, code := range usedRunes {
-		if code > maxCode {
-			maxCode = code
+	maxCID := 0
+	for cid := range cidToUnicode {
+		if cid > maxCID {
+			maxCID = cid
 		}
 	}
 
-	// Determine if we need 4-byte or 2-byte format
-	use4Byte := maxCode > 0xFFFF
+	use4Byte := maxCID > 0xFFFF
 
-	// Build sorted list of character codes
-	codes := make([]int, 0, len(usedRunes))
-	for _, code := range usedRunes {
-		codes = append(codes, code)
-	}
-	sort.Ints(codes)
-
-	// Build bfrange entries by grouping consecutive codes
-	type rangeEntry struct {
-		start int
-		end   int
-	}
-	ranges := make([]rangeEntry, 0)
-
-	if len(codes) > 0 {
-		rangeStart := codes[0]
-		rangeEnd := codes[0]
-
-		for i := 1; i < len(codes); i++ {
-			if codes[i] == rangeEnd+1 {
-				// Extend current range
-				rangeEnd = codes[i]
-			} else {
-				// Save current range and start new one
-				ranges = append(ranges, rangeEntry{start: rangeStart, end: rangeEnd})
-				rangeStart = codes[i]
-				rangeEnd = codes[i]
-			}
+	cids := make([]int, 0, len(cidToUnicode))
+	for cid := range cidToUnicode {
+		if cid == 0 {
+			continue
 		}
-		// Add final range
-		ranges = append(ranges, rangeEntry{start: rangeStart, end: rangeEnd})
+		cids = append(cids, cid)
+	}
+	sort.Ints(cids)
+
+	total := len(cids)
+	if total == 0 {
+		return `/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo
+<</Registry (Adobe)
+/Ordering (UCS)
+/Supplement 0
+>> def
+/CMapName /Adobe-Identity-UCS def
+/CMapType 2 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+0 beginbfchar
+endbfchar
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end`
 	}
 
-	// Build CMap string
 	var cmap bytes.Buffer
-
-	// Header (same for all CMaps)
 	cmap.WriteString(`/CIDInit /ProcSet findresource begin
 12 dict begin
 begincmap
@@ -1389,7 +1391,6 @@ begincmap
 /CMapType 2 def
 `)
 
-	// Codespace range
 	cmap.WriteString("1 begincodespacerange\n")
 	if use4Byte {
 		cmap.WriteString("<00000000> <0010FFFF>\n")
@@ -1398,28 +1399,44 @@ begincmap
 	}
 	cmap.WriteString("endcodespacerange\n")
 
-	// bfrange entries
-	if len(ranges) > 0 {
-		cmap.WriteString(fmt.Sprintf("%d beginbfrange\n", len(ranges)))
-		for _, r := range ranges {
-			if use4Byte {
-				// 4-byte format: <XXXXXXXX> <YYYYYYYY> <ZZZZZZZZ>
-				cmap.WriteString(fmt.Sprintf("<%08X> <%08X> <%08X>\n", r.start, r.end, r.start))
-			} else {
-				// 2-byte format: <XXXX> <YYYY> <ZZZZ>
-				cmap.WriteString(fmt.Sprintf("<%04X> <%04X> <%04X>\n", r.start, r.end, r.start))
-			}
+	blockSize := 100
+	for i := 0; i < total; i += blockSize {
+		end := i + blockSize
+		if end > total {
+			end = total
 		}
-		cmap.WriteString("endbfrange\n")
-	} else {
-		cmap.WriteString("0 beginbfrange\nendbfrange\n")
+		cmap.WriteString(fmt.Sprintf("%d beginbfchar\n", end-i))
+		for _, cid := range cids[i:end] {
+			unicode := cidToUnicode[cid]
+			cmap.WriteString(fmt.Sprintf("<%s> <%s>\n", formatCIDHex(cid, use4Byte), formatUnicodeHex(unicode)))
+		}
+		cmap.WriteString("endbfchar\n")
 	}
 
-	// Footer
 	cmap.WriteString(`endcmap
 CMapName currentdict /CMap defineresource pop
 end
 end`)
 
 	return cmap.String()
+}
+
+func formatCIDHex(cid int, use4Byte bool) string {
+	if use4Byte {
+		return fmt.Sprintf("%08X", cid)
+	}
+	return fmt.Sprintf("%04X", cid)
+}
+
+func formatUnicodeHex(codepoint int) string {
+	if codepoint <= 0xFFFF {
+		return fmt.Sprintf("%04X", codepoint)
+	}
+	if codepoint > 0x10FFFF {
+		return "0000"
+	}
+	codepoint -= 0x10000
+	high := 0xD800 + ((codepoint >> 10) & 0x3FF)
+	low := 0xDC00 + (codepoint & 0x3FF)
+	return fmt.Sprintf("%04X%04X", high, low)
 }

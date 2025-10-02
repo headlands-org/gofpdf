@@ -19,17 +19,18 @@ package gofpdf
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"testing"
 )
 
 // TestUtf8ToUtf16 tests the utf8toutf16 function with various character types
 func TestUtf8ToUtf16(t *testing.T) {
 	tests := []struct {
-		name           string
-		input          string
-		expectedHex    string
-		description    string
-		codepoint      string
+		name        string
+		input       string
+		expectedHex string
+		description string
+		codepoint   string
 	}{
 		// 1-byte sequences (ASCII)
 		{
@@ -187,46 +188,46 @@ func TestUtf8ToUtf16WithoutBOM(t *testing.T) {
 func TestUtf8ToUtf16SurrogatePairs(t *testing.T) {
 	// Test specific surrogate pair calculations
 	tests := []struct {
-		codepoint     uint32
-		expectedHigh  uint16
-		expectedLow   uint16
-		char          string
-		description   string
+		codepoint    uint32
+		expectedHigh uint16
+		expectedLow  uint16
+		char         string
+		description  string
 	}{
 		{
-			codepoint:     0x10000,
-			expectedHigh:  0xD800,
-			expectedLow:   0xDC00,
-			char:          "\U00010000",
-			description:   "U+10000 (first supplementary plane)",
+			codepoint:    0x10000,
+			expectedHigh: 0xD800,
+			expectedLow:  0xDC00,
+			char:         "\U00010000",
+			description:  "U+10000 (first supplementary plane)",
 		},
 		{
-			codepoint:     0x1F389,
-			expectedHigh:  0xD83C,
-			expectedLow:   0xDF89,
-			char:          "\U0001F389",
-			description:   "U+1F389 (party popper emoji)",
+			codepoint:    0x1F389,
+			expectedHigh: 0xD83C,
+			expectedLow:  0xDF89,
+			char:         "\U0001F389",
+			description:  "U+1F389 (party popper emoji)",
 		},
 		{
-			codepoint:     0x1F600,
-			expectedHigh:  0xD83D,
-			expectedLow:   0xDE00,
-			char:          "\U0001F600",
-			description:   "U+1F600 (grinning face emoji)",
+			codepoint:    0x1F600,
+			expectedHigh: 0xD83D,
+			expectedLow:  0xDE00,
+			char:         "\U0001F600",
+			description:  "U+1F600 (grinning face emoji)",
 		},
 		{
-			codepoint:     0x1F680,
-			expectedHigh:  0xD83D,
-			expectedLow:   0xDE80,
-			char:          "\U0001F680",
-			description:   "U+1F680 (rocket emoji)",
+			codepoint:    0x1F680,
+			expectedHigh: 0xD83D,
+			expectedLow:  0xDE80,
+			char:         "\U0001F680",
+			description:  "U+1F680 (rocket emoji)",
 		},
 		{
-			codepoint:     0x1D573,
-			expectedHigh:  0xD835,
-			expectedLow:   0xDD73,
-			char:          "\U0001D573",
-			description:   "U+1D573 (math bold italic H)",
+			codepoint:    0x1D573,
+			expectedHigh: 0xD835,
+			expectedLow:  0xDD73,
+			char:         "\U0001D573",
+			description:  "U+1D573 (math bold italic H)",
 		},
 	}
 
@@ -316,125 +317,58 @@ func TestUtf8ToUtf16EmojiRange(t *testing.T) {
 // ToUnicode CMaps for both BMP and supplementary plane characters
 func TestDynamicToUnicodeCMap(t *testing.T) {
 	tests := []struct {
-		name              string
-		usedRunes         map[int]int
-		expectCodespace   string // Expected codespace range
-		expectRangeCount  int    // Expected number of bfrange entries
-		description       string
+		name          string
+		usedRunes     map[int]int
+		expectEntries map[int]string
 	}{
 		{
-			name: "BMP_only",
-			usedRunes: map[int]int{
-				0:  0x0041, // A
-				1:  0x0042, // B
-				2:  0x0043, // C
+			name:      "BMP_only",
+			usedRunes: map[int]int{1: 0x0041, 2: 0x0042, 3: 0x0043},
+			expectEntries: map[int]string{
+				1: "0041",
+				2: "0042",
+				3: "0043",
 			},
-			expectCodespace:  "<0000> <FFFF>",
-			expectRangeCount: 1, // Consecutive A-C
-			description:      "BMP-only characters should use 2-byte codespace",
 		},
 		{
-			name: "supplementary_plane_only",
-			usedRunes: map[int]int{
-				0:  0x1F600, // Grinning face emoji
-				1:  0x1F601, // Grinning face with smiling eyes
-				2:  0x1F602, // Face with tears of joy
+			name:      "supplementary_plane_only",
+			usedRunes: map[int]int{1: 0x1F600, 2: 0x1F601, 3: 0x1F602},
+			expectEntries: map[int]string{
+				1: "D83DDE00",
+				2: "D83DDE01",
+				3: "D83DDE02",
 			},
-			expectCodespace:  "<00000000> <0010FFFF>",
-			expectRangeCount: 1, // Consecutive emojis
-			description:      "Supplementary plane characters should use 4-byte codespace",
 		},
 		{
-			name: "mixed_BMP_and_supplementary",
-			usedRunes: map[int]int{
-				0:  0x0041,  // A
-				1:  0x0042,  // B
-				2:  0x1F600, // Grinning face emoji
-				3:  0x1F680, // Rocket emoji
+			name:      "mixed",
+			usedRunes: map[int]int{1: 0x0041, 2: 0x0042, 3: 0x1F600, 4: 0x1F680},
+			expectEntries: map[int]string{
+				1: "0041",
+				2: "0042",
+				3: "D83DDE00",
+				4: "D83DDE80",
 			},
-			expectCodespace:  "<00000000> <0010FFFF>",
-			expectRangeCount: 3, // A-B, 1F600, 1F680
-			description:      "Mixed BMP+supplementary should use 4-byte codespace",
-		},
-		{
-			name: "single_supplementary",
-			usedRunes: map[int]int{
-				0: 0x1F389, // Party popper emoji
-			},
-			expectCodespace:  "<00000000> <0010FFFF>",
-			expectRangeCount: 1,
-			description:      "Single supplementary plane character should use 4-byte codespace",
-		},
-		{
-			name: "consecutive_ranges",
-			usedRunes: map[int]int{
-				0:  0x0041, // A
-				1:  0x0042, // B
-				2:  0x0043, // C
-				3:  0x0050, // P (gap before)
-				4:  0x0051, // Q
-			},
-			expectCodespace:  "<0000> <FFFF>",
-			expectRangeCount: 2, // A-C, P-Q
-			description:      "Consecutive ranges should be optimized",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmap := generateToUnicodeCMap(tt.usedRunes)
-
-			// Verify the cmap is not empty
 			if len(cmap) == 0 {
 				t.Fatal("Generated CMap is empty")
 			}
-
-			// Verify correct codespace range
-			if !containsString(cmap, tt.expectCodespace) {
-				t.Errorf("%s: Expected codespace %s not found in CMap", tt.description, tt.expectCodespace)
+			if !strings.Contains(cmap, "<0000> <FFFF>") {
+				t.Errorf("expected 2-byte codespace range in CMap: %s", cmap)
 			}
-
-			// Verify bfrange count
-			expectedRangeDeclaration := fmt.Sprintf("%d beginbfrange", tt.expectRangeCount)
-			if !containsString(cmap, expectedRangeDeclaration) {
-				t.Errorf("%s: Expected %q not found in CMap", tt.description, expectedRangeDeclaration)
+			if !strings.Contains(cmap, "beginbfchar") {
+				t.Errorf("expected bfchar entries in CMap: %s", cmap)
 			}
-
-			// Verify basic CMap structure
-			requiredStrings := []string{
-				"/CIDInit /ProcSet findresource begin",
-				"begincmap",
-				"/CIDSystemInfo",
-				"/CMapName /Adobe-Identity-UCS def",
-				"/CMapType 2 def",
-				"begincodespacerange",
-				"endcodespacerange",
-				"endbfrange",
-				"endcmap",
-				"CMapName currentdict /CMap defineresource pop",
-			}
-
-			for _, required := range requiredStrings {
-				if !containsString(cmap, required) {
-					t.Errorf("%s: Required string %q not found in CMap", tt.description, required)
+			for cid, hex := range tt.expectEntries {
+				pattern := fmt.Sprintf("<%04X> <%s>", cid, hex)
+				if !strings.Contains(cmap, pattern) {
+					t.Errorf("missing mapping %s", pattern)
 				}
 			}
-
-			t.Logf("PASS: %s - CMap length: %d bytes", tt.description, len(cmap))
 		})
 	}
-}
-
-// Helper function to check if a string contains a substring
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && findSubstring(s, substr))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

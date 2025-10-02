@@ -395,9 +395,9 @@ func TestParseCmapFormat12(t *testing.T) {
 		expectedSymbolToChars map[int][]int
 	}{
 		{
-			name:   "Empty groups",
-			groups: []cmapGroup{},
-			expectedCharToSymbol: map[int]int{},
+			name:                  "Empty groups",
+			groups:                []cmapGroup{},
+			expectedCharToSymbol:  map[int]int{},
 			expectedSymbolToChars: map[int][]int{},
 		},
 		{
@@ -583,11 +583,11 @@ func TestParseCmapFormat12InvalidFormat(t *testing.T) {
 // TestParseCmapFormat12InvalidLength tests error handling for invalid length
 func TestParseCmapFormat12InvalidLength(t *testing.T) {
 	data := make([]byte, 16)
-	binary.BigEndian.PutUint16(data[0:2], 12)     // format = 12
-	binary.BigEndian.PutUint16(data[2:4], 0)      // reserved = 0
-	binary.BigEndian.PutUint32(data[4:8], 999)    // Invalid length
-	binary.BigEndian.PutUint32(data[8:12], 0)     // language = 0
-	binary.BigEndian.PutUint32(data[12:16], 2)    // numGroups = 2 (requires length = 40, not 999)
+	binary.BigEndian.PutUint16(data[0:2], 12)  // format = 12
+	binary.BigEndian.PutUint16(data[2:4], 0)   // reserved = 0
+	binary.BigEndian.PutUint32(data[4:8], 999) // Invalid length
+	binary.BigEndian.PutUint32(data[8:12], 0)  // language = 0
+	binary.BigEndian.PutUint32(data[12:16], 2) // numGroups = 2 (requires length = 40, not 999)
 
 	utf := newUTF8Font(&fileReader{
 		readerPosition: 0,
@@ -645,8 +645,8 @@ func TestParseCmapFormat12LargeRange(t *testing.T) {
 // BenchmarkParseCmapFormat12 benchmarks the parseCmapFormat12 function
 func BenchmarkParseCmapFormat12(b *testing.B) {
 	groups := []cmapGroup{
-		{startCharCode: 0x0041, endCharCode: 0x005A, startGlyphID: 10}, // A-Z
-		{startCharCode: 0x0061, endCharCode: 0x007A, startGlyphID: 36}, // a-z
+		{startCharCode: 0x0041, endCharCode: 0x005A, startGlyphID: 10},    // A-Z
+		{startCharCode: 0x0061, endCharCode: 0x007A, startGlyphID: 36},    // a-z
 		{startCharCode: 0x1F600, endCharCode: 0x1F64F, startGlyphID: 100}, // Emoji
 	}
 
@@ -665,317 +665,98 @@ func BenchmarkParseCmapFormat12(b *testing.B) {
 // TestGenerateToUnicodeCMap tests the generateToUnicodeCMap function
 func TestGenerateToUnicodeCMap(t *testing.T) {
 	tests := []struct {
-		name             string
-		usedRunes        map[int]int
-		expectCodespace  string // Expected codespace range
-		expect4Byte      bool
-		expectNumRanges  int
-		checkContent     func(t *testing.T, cmap string)
+		name            string
+		cidToUnicode    map[int]int
+		expectCodespace string
+		expectEntries   map[int]string
 	}{
 		{
-			name:             "Empty usedRunes",
-			usedRunes:        map[int]int{},
-			expectCodespace:  "<0000> <FFFF>",
-			expect4Byte:      false,
-			expectNumRanges:  0,
-			checkContent: func(t *testing.T, cmap string) {
-				if !bytes.Contains([]byte(cmap), []byte("0 beginbfrange")) {
-					t.Error("Empty map should have 0 beginbfrange")
-				}
-			},
-		},
-		{
-			name: "Single BMP character",
-			usedRunes: map[int]int{
-				0: 65, // 'A'
-			},
+			name:            "Basic BMP",
+			cidToUnicode:    map[int]int{1: 0x41, 2: 0x5A, 3: 0x64},
 			expectCodespace: "<0000> <FFFF>",
-			expect4Byte:     false,
-			expectNumRanges: 1,
-			checkContent: func(t *testing.T, cmap string) {
-				if !bytes.Contains([]byte(cmap), []byte("<0041> <0041> <0041>")) {
-					t.Error("Should contain single character range for 'A'")
-				}
+			expectEntries: map[int]string{
+				1: "0041",
+				2: "005A",
+				3: "0064",
 			},
 		},
 		{
-			name: "Sequential BMP characters",
-			usedRunes: map[int]int{
-				0: 65, // 'A'
-				1: 66, // 'B'
-				2: 67, // 'C'
-			},
+			name:            "Supplementary",
+			cidToUnicode:    map[int]int{1: 0x1F600},
 			expectCodespace: "<0000> <FFFF>",
-			expect4Byte:     false,
-			expectNumRanges: 1,
-			checkContent: func(t *testing.T, cmap string) {
-				if !bytes.Contains([]byte(cmap), []byte("<0041> <0043> <0041>")) {
-					t.Error("Should contain sequential range A-C")
-				}
+			expectEntries: map[int]string{
+				1: "D83DDE00",
 			},
 		},
 		{
-			name: "Non-sequential BMP characters",
-			usedRunes: map[int]int{
-				0: 65,  // 'A'
-				1: 90,  // 'Z'
-				2: 100, // 'd'
-			},
+			name:            "Mixed",
+			cidToUnicode:    map[int]int{1: 0x41, 2: 0x1F600, 3: 0x2665},
 			expectCodespace: "<0000> <FFFF>",
-			expect4Byte:     false,
-			expectNumRanges: 3,
-			checkContent: func(t *testing.T, cmap string) {
-				if !bytes.Contains([]byte(cmap), []byte("<0041> <0041> <0041>")) {
-					t.Error("Should contain 'A'")
-				}
-				if !bytes.Contains([]byte(cmap), []byte("<005A> <005A> <005A>")) {
-					t.Error("Should contain 'Z'")
-				}
-				if !bytes.Contains([]byte(cmap), []byte("<0064> <0064> <0064>")) {
-					t.Error("Should contain 'd'")
-				}
-			},
-		},
-		{
-			name: "Single supplementary plane character (emoji)",
-			usedRunes: map[int]int{
-				0: 0x1F600, // 😀
-			},
-			expectCodespace: "<00000000> <0010FFFF>",
-			expect4Byte:     true,
-			expectNumRanges: 1,
-			checkContent: func(t *testing.T, cmap string) {
-				if !bytes.Contains([]byte(cmap), []byte("<0001F600> <0001F600> <0001F600>")) {
-					t.Error("Should contain 8-digit hex for emoji")
-				}
-			},
-		},
-		{
-			name: "Sequential supplementary plane characters",
-			usedRunes: map[int]int{
-				0: 0x1F600, // 😀
-				1: 0x1F601, // 😁
-				2: 0x1F602, // 😂
-			},
-			expectCodespace: "<00000000> <0010FFFF>",
-			expect4Byte:     true,
-			expectNumRanges: 1,
-			checkContent: func(t *testing.T, cmap string) {
-				if !bytes.Contains([]byte(cmap), []byte("<0001F600> <0001F602> <0001F600>")) {
-					t.Error("Should contain sequential emoji range")
-				}
-			},
-		},
-		{
-			name: "Mixed BMP and supplementary plane",
-			usedRunes: map[int]int{
-				0: 65,      // 'A' (BMP)
-				1: 66,      // 'B' (BMP)
-				2: 0x1F600, // 😀 (supplementary)
-				3: 0x1F601, // 😁 (supplementary)
-			},
-			expectCodespace: "<00000000> <0010FFFF>",
-			expect4Byte:     true,
-			expectNumRanges: 2,
-			checkContent: func(t *testing.T, cmap string) {
-				// Should use 4-byte format for all characters
-				if !bytes.Contains([]byte(cmap), []byte("<00000041> <00000042> <00000041>")) {
-					t.Error("Should contain 8-digit hex for BMP in mixed mode")
-				}
-				if !bytes.Contains([]byte(cmap), []byte("<0001F600> <0001F601> <0001F600>")) {
-					t.Error("Should contain emoji range")
-				}
-			},
-		},
-		{
-			name: "Large BMP-only range (ASCII printable)",
-			usedRunes: func() map[int]int {
-				m := make(map[int]int)
-				for i := 0x20; i <= 0x7E; i++ {
-					m[i-0x20] = i
-				}
-				return m
-			}(),
-			expectCodespace: "<0000> <FFFF>",
-			expect4Byte:     false,
-			expectNumRanges: 1,
-			checkContent: func(t *testing.T, cmap string) {
-				if !bytes.Contains([]byte(cmap), []byte("<0020> <007E> <0020>")) {
-					t.Error("Should contain ASCII printable range")
-				}
-			},
-		},
-		{
-			name: "Sparse supplementary plane (multiple emoji groups)",
-			usedRunes: map[int]int{
-				0: 0x1F600, // 😀
-				1: 0x1F601, // 😁
-				2: 0x1F680, // 🚀 (gap)
-				3: 0x1F681, // 🚁
-			},
-			expectCodespace: "<00000000> <0010FFFF>",
-			expect4Byte:     true,
-			expectNumRanges: 2,
-			checkContent: func(t *testing.T, cmap string) {
-				if !bytes.Contains([]byte(cmap), []byte("<0001F600> <0001F601> <0001F600>")) {
-					t.Error("Should contain first emoji range")
-				}
-				if !bytes.Contains([]byte(cmap), []byte("<0001F680> <0001F681> <0001F680>")) {
-					t.Error("Should contain second emoji range")
-				}
-			},
-		},
-		{
-			name: "Maximum Unicode code point",
-			usedRunes: map[int]int{
-				0: 0x10FFFF, // Maximum valid Unicode
-			},
-			expectCodespace: "<00000000> <0010FFFF>",
-			expect4Byte:     true,
-			expectNumRanges: 1,
-			checkContent: func(t *testing.T, cmap string) {
-				if !bytes.Contains([]byte(cmap), []byte("<0010FFFF> <0010FFFF> <0010FFFF>")) {
-					t.Error("Should contain maximum Unicode code point")
-				}
+			expectEntries: map[int]string{
+				1: "0041",
+				2: "D83DDE00",
+				3: "2665",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateToUnicodeCMap(tt.usedRunes)
+			result := generateToUnicodeCMap(tt.cidToUnicode)
 
-			// Check that it's not empty
 			if len(result) == 0 {
-				t.Error("Generated CMap should not be empty")
+				t.Fatal("Generated CMap should not be empty")
 			}
 
-			// Check required header elements
-			requiredElements := []string{
+			required := []string{
 				"/CIDInit /ProcSet findresource begin",
 				"begincmap",
-				"/CIDSystemInfo",
 				"/CMapName /Adobe-Identity-UCS def",
 				"/CMapType 2 def",
-				"begincodespacerange",
-				"endcodespacerange",
-				"beginbfrange",
-				"endbfrange",
+				"beginbfchar",
+				"endbfchar",
 				"endcmap",
-				"CMapName currentdict /CMap defineresource pop",
 			}
-
-			for _, elem := range requiredElements {
-				if !bytes.Contains([]byte(result), []byte(elem)) {
-					t.Errorf("CMap missing required element: %s", elem)
+			for _, token := range required {
+				if !bytes.Contains([]byte(result), []byte(token)) {
+					t.Errorf("expected token %q in CMap", token)
 				}
 			}
 
-			// Check codespace range
 			if !bytes.Contains([]byte(result), []byte(tt.expectCodespace)) {
-				t.Errorf("Expected codespace %s not found in CMap", tt.expectCodespace)
+				t.Errorf("expected codespace %s", tt.expectCodespace)
 			}
 
-			// Check number of ranges
-			expectedRangeDecl := fmt.Sprintf("%d beginbfrange", tt.expectNumRanges)
-			if !bytes.Contains([]byte(result), []byte(expectedRangeDecl)) {
-				t.Errorf("Expected %s not found in CMap", expectedRangeDecl)
-			}
-
-			// Run custom content checks
-			if tt.checkContent != nil {
-				tt.checkContent(t, result)
-			}
-
-			// Verify the CMap is valid PostScript (basic syntax check)
-			if !bytes.HasSuffix([]byte(result), []byte("end")) {
-				t.Error("CMap should end with 'end'")
+			for cid, hex := range tt.expectEntries {
+				entry := fmt.Sprintf("<%04X> <%s>", cid, hex)
+				if !bytes.Contains([]byte(result), []byte(entry)) {
+					t.Errorf("missing mapping %s", entry)
+				}
 			}
 		})
 	}
 }
 
-// TestGenerateToUnicodeCMapRangeOptimization tests that consecutive characters are optimized into ranges
-func TestGenerateToUnicodeCMapRangeOptimization(t *testing.T) {
-	// Create a large sequential range
-	usedRunes := make(map[int]int)
-	for i := 0; i < 100; i++ {
-		usedRunes[i] = i + 0x41 // A-Z and beyond
+func TestGenerateToUnicodeCMapBlockSplitting(t *testing.T) {
+	cidToUnicode := make(map[int]int)
+	for i := 1; i <= 205; i++ {
+		cidToUnicode[i] = 0x30 + i
 	}
 
-	result := generateToUnicodeCMap(usedRunes)
-
-	// Should be optimized into a single range
-	if !bytes.Contains([]byte(result), []byte("1 beginbfrange")) {
-		t.Error("Sequential characters should be optimized into 1 range")
-	}
-
-	// Should contain the full range
-	if !bytes.Contains([]byte(result), []byte("<0041> <00A4> <0041>")) {
-		t.Error("Should contain optimized range from 0x41 to 0xA4")
+	result := generateToUnicodeCMap(cidToUnicode)
+	if bytes.Count([]byte(result), []byte("beginbfchar")) < 3 {
+		t.Fatalf("expected multiple beginbfchar blocks, got %d", bytes.Count([]byte(result), []byte("beginbfchar")))
 	}
 }
 
-// TestGenerateToUnicodeCMapIdentityMapping verifies identity mapping (CID == Unicode)
-func TestGenerateToUnicodeCMapIdentityMapping(t *testing.T) {
-	usedRunes := map[int]int{
-		0: 100,
-		1: 200,
-		2: 300,
+func TestGenerateToUnicodeCMapSupplementaryPairs(t *testing.T) {
+	cidToUnicode := map[int]int{1: 0x1F468, 2: 0x1F469}
+	result := generateToUnicodeCMap(cidToUnicode)
+	if !bytes.Contains([]byte(result), []byte("<0001> <D83DDC68>")) {
+		t.Error("expected surrogate pair for 0x1F468")
 	}
-
-	result := generateToUnicodeCMap(usedRunes)
-
-	// For identity mapping, start and Unicode should be the same
-	// <0064> <0064> <0064> means char 100 maps to Unicode 100
-	if !bytes.Contains([]byte(result), []byte("<0064> <0064> <0064>")) {
-		t.Error("Should use identity mapping for char 100")
-	}
-	if !bytes.Contains([]byte(result), []byte("<00C8> <00C8> <00C8>")) {
-		t.Error("Should use identity mapping for char 200")
-	}
-	if !bytes.Contains([]byte(result), []byte("<012C> <012C> <012C>")) {
-		t.Error("Should use identity mapping for char 300")
-	}
-}
-
-// TestGenerateToUnicodeCMapHexFormat verifies correct hex formatting
-func TestGenerateToUnicodeCMapHexFormat(t *testing.T) {
-	tests := []struct {
-		name      string
-		usedRunes map[int]int
-		expected  string
-	}{
-		{
-			name:      "2-byte hex uppercase",
-			usedRunes: map[int]int{0: 0xABCD},
-			expected:  "<ABCD> <ABCD> <ABCD>",
-		},
-		{
-			name:      "4-byte hex uppercase",
-			usedRunes: map[int]int{0: 0x1F600},
-			expected:  "<0001F600> <0001F600> <0001F600>",
-		},
-		{
-			name:      "Leading zeros in 2-byte",
-			usedRunes: map[int]int{0: 0x0001},
-			expected:  "<0001> <0001> <0001>",
-		},
-		{
-			name:      "Leading zeros in 4-byte",
-			usedRunes: map[int]int{0: 0x00010000},
-			expected:  "<00010000> <00010000> <00010000>",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := generateToUnicodeCMap(tt.usedRunes)
-
-			if !bytes.Contains([]byte(result), []byte(tt.expected)) {
-				t.Errorf("Expected hex format %s not found in CMap", tt.expected)
-			}
-		})
+	if !bytes.Contains([]byte(result), []byte("<0002> <D83DDC69>")) {
+		t.Error("expected surrogate pair for 0x1F469")
 	}
 }
 

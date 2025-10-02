@@ -963,6 +963,9 @@ func (f *Fpdf) GetStringSymbolWidth(s string) int {
 		// Use grapheme clusters for correct emoji handling
 		clusters := graphemeClusters(s)
 		for _, cluster := range clusters {
+			for _, r := range cluster {
+				f.ensureCIDForRune(int(r))
+			}
 			clusterWidth := graphemeClusterWidth(cluster, &f.currentFont)
 			if clusterWidth > 0 {
 				// Skip width 65535 (marks missing glyphs in some fonts)
@@ -1469,10 +1472,7 @@ func (f *Fpdf) ClipText(x, y float64, txtStr string, outline bool) {
 	f.clipNest++
 	var txt2 string
 	if f.isCurrentUTF8 {
-		txt2 = f.escape(utf8toutf16(txtStr, false))
-		for _, uni := range []rune(txtStr) {
-			f.currentFont.usedRunes[int(uni)] = int(uni)
-		}
+		txt2 = f.encodeCIDString(txtStr)
 	} else {
 		txt2 = f.escape(txtStr)
 	}
@@ -1728,12 +1728,6 @@ func (f *Fpdf) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 			MissingWidth: round(utf8File.DefaultWidth),
 		}
 
-		var sbarr map[int]int
-		if f.aliasNbPagesStr == "" {
-			sbarr = makeSubsetRange(57)
-		} else {
-			sbarr = makeSubsetRange(32)
-		}
 		def := fontDefType{
 			Tp:        Type,
 			Name:      fontKey,
@@ -1741,7 +1735,9 @@ func (f *Fpdf) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 			Up:        int(round(utf8File.UnderlinePosition)),
 			Ut:        round(utf8File.UnderlineThickness),
 			Cw:        utf8File.CharWidths,
-			usedRunes: sbarr,
+			usedRunes: make(map[int]int),
+			runeToCID: make(map[int]int),
+			nextCID:   1,
 			File:      fileStr,
 			utf8File:  utf8File,
 		}
@@ -1865,12 +1861,6 @@ func (f *Fpdf) addFontFromBytes(familyStr, styleStr string, jsonFileBytes, zFile
 			MissingWidth: round(utf8File.DefaultWidth),
 		}
 
-		var sbarr map[int]int
-		if f.aliasNbPagesStr == "" {
-			sbarr = makeSubsetRange(57)
-		} else {
-			sbarr = makeSubsetRange(32)
-		}
 		def := fontDefType{
 			Tp:        Type,
 			Name:      fontkey,
@@ -1879,7 +1869,9 @@ func (f *Fpdf) addFontFromBytes(familyStr, styleStr string, jsonFileBytes, zFile
 			Ut:        round(utf8File.UnderlineThickness),
 			Cw:        utf8File.CharWidths,
 			utf8File:  utf8File,
-			usedRunes: sbarr,
+			usedRunes: make(map[int]int),
+			runeToCID: make(map[int]int),
+			nextCID:   1,
 		}
 		def.i, _ = generateFontID(def)
 		f.fonts[fontkey] = def
@@ -2212,6 +2204,67 @@ func (f *Fpdf) Bookmark(txtStr string, level int, y float64) {
 	f.outlines = append(f.outlines, outlineType{text: txtStr, level: level, y: y, p: f.PageNo(), prev: -1, last: -1, next: -1, first: -1})
 }
 
+func (f *Fpdf) ensureCIDInternal(font *fontDefType, fontKey string, r int) int {
+	if font.runeToCID == nil {
+		font.runeToCID = make(map[int]int)
+	}
+	if font.usedRunes == nil {
+		font.usedRunes = make(map[int]int)
+	}
+	if font.nextCID == 0 {
+		font.nextCID = 1
+	}
+	if cid, ok := font.runeToCID[r]; ok {
+		return cid
+	}
+	if font.nextCID > 0xFFFF {
+		f.err = fmt.Errorf("CID limit exceeded for font %s", fontKey)
+		return 0
+	}
+	cid := font.nextCID
+	font.nextCID++
+	font.runeToCID[r] = cid
+	font.usedRunes[cid] = r
+	return cid
+}
+
+func (f *Fpdf) ensureCIDForRune(r int) int {
+	if f.err != nil || !f.isCurrentUTF8 {
+		return 0
+	}
+	fontKey := getFontKey(f.fontFamily, f.fontStyle)
+	font, ok := f.fonts[fontKey]
+	if !ok {
+		return 0
+	}
+	cid := f.ensureCIDInternal(&font, fontKey, r)
+	f.fonts[fontKey] = font
+	f.currentFont = font
+	return cid
+}
+
+func (f *Fpdf) encodeCIDString(txt string) string {
+	if !f.isCurrentUTF8 {
+		return f.escape(txt)
+	}
+	fontKey := getFontKey(f.fontFamily, f.fontStyle)
+	font, ok := f.fonts[fontKey]
+	if !ok {
+		return ""
+	}
+	b := make([]byte, 0, len([]rune(txt))*2)
+	for _, r := range txt {
+		cid := f.ensureCIDInternal(&font, fontKey, int(r))
+		if f.err != nil {
+			break
+		}
+		b = append(b, byte(cid>>8), byte(cid&0xFF))
+	}
+	f.fonts[fontKey] = font
+	f.currentFont = font
+	return f.escape(string(b))
+}
+
 // Text prints a character string. The origin (x, y) is on the left of the
 // first character at the baseline. This method permits a string to be placed
 // precisely on the page, but it is usually easier to use Cell(), MultiCell()
@@ -2223,10 +2276,7 @@ func (f *Fpdf) Text(x, y float64, txtStr string) {
 			txtStr = reverseText(txtStr)
 			x -= f.GetStringWidth(txtStr)
 		}
-		txt2 = f.escape(utf8toutf16(txtStr, false))
-		for _, uni := range []rune(txtStr) {
-			f.currentFont.usedRunes[int(uni)] = int(uni)
-		}
+		txt2 = f.encodeCIDString(txtStr)
 	} else {
 		txt2 = f.escape(txtStr)
 	}
@@ -2435,10 +2485,7 @@ func (f *Fpdf) CellFormat(w, h float64, txtStr, borderStr string, ln int,
 				txtStr = reverseText(txtStr)
 			}
 			wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
-			for _, uni := range []rune(txtStr) {
-				f.currentFont.usedRunes[int(uni)] = int(uni)
-			}
-			space := f.escape(utf8toutf16(" ", false))
+			space := f.encodeCIDString(" ")
 			strSize := f.GetStringSymbolWidth(txtStr)
 			s.printf("BT 0 Tw %.2f %.2f Td [", (f.x+dx)*k, (f.h-(f.y+.5*h+.3*f.fontSize))*k)
 			t := strings.Split(txtStr, " ")
@@ -2446,7 +2493,7 @@ func (f *Fpdf) CellFormat(w, h float64, txtStr, borderStr string, ln int,
 			numt := len(t)
 			for i := 0; i < numt; i++ {
 				tx := t[i]
-				tx = "(" + f.escape(utf8toutf16(tx, false)) + ")"
+				tx = "(" + f.encodeCIDString(tx) + ")"
 				s.printf("%s ", tx)
 				if (i + 1) < numt {
 					s.printf("%.3f(%s) ", -shift, space)
@@ -2459,10 +2506,7 @@ func (f *Fpdf) CellFormat(w, h float64, txtStr, borderStr string, ln int,
 				if f.isRTL {
 					txtStr = reverseText(txtStr)
 				}
-				txt2 = f.escape(utf8toutf16(txtStr, false))
-				for _, uni := range []rune(txtStr) {
-					f.currentFont.usedRunes[int(uni)] = int(uni)
-				}
+				txt2 = f.encodeCIDString(txtStr)
 			} else {
 
 				txt2 = strings.Replace(txtStr, "\\", "\\\\", -1)
@@ -3031,7 +3075,7 @@ func (f *Fpdf) WriteLinkID(h float64, displayStr string, linkID int) {
 //
 // width indicates the width of the box the text will be drawn in. This is in
 // the unit of measure specified in New(). If it is set to 0, the bounding box
-//of the page will be taken (pageWidth - leftMargin - rightMargin).
+// of the page will be taken (pageWidth - leftMargin - rightMargin).
 //
 // lineHeight indicates the line height in the unit of measure specified in
 // New().
@@ -4216,13 +4260,14 @@ func (f *Fpdf) putfonts() {
 				f.out("endobj")
 			case "UTF8":
 				fontName := "utf8" + font.Name
-				usedRunes := font.usedRunes
-				delete(usedRunes, 0)
-				utf8FontStream := font.utf8File.GenerateCutFont(usedRunes)
+				usedRunesCopy := make(map[int]int, len(font.usedRunes))
+				for cid, runeVal := range font.usedRunes {
+					usedRunesCopy[cid] = runeVal
+				}
+				utf8FontStream := font.utf8File.GenerateCutFont(usedRunesCopy)
 				utf8FontSize := len(utf8FontStream)
 				compressedFontStream := sliceCompress(utf8FontStream)
-				CodeSignDictionary := font.utf8File.CodeSymbolDictionary
-				delete(CodeSignDictionary, 0)
+				cidGlyphMap := font.utf8File.CodeSymbolDictionary
 
 				f.newobj()
 				f.out(fmt.Sprintf("<</Type /Font\n/Subtype /Type0\n/BaseFont /%s\n/Encoding /Identity-H\n/DescendantFonts [%d 0 R]\n/ToUnicode %d 0 R>>\n"+"endobj", fontName, f.n+1, f.n+2))
@@ -4268,35 +4313,22 @@ func (f *Fpdf) putfonts() {
 				f.out(s.String())
 				f.out("endobj")
 
-			// Embed CIDToGIDMap
-			// Detect if supplementary plane characters are used (any code > 0xFFFF)
-			hasSupplementary := false
-			for cc := range CodeSignDictionary {
-				if cc > 0xFFFF {
-					hasSupplementary = true
-					break
+				// Embed CIDToGIDMap
+				f.newobj()
+				maxCID := font.utf8File.LastRune
+				if maxCID < 0 {
+					maxCID = 0
 				}
-			}
-
-			f.newobj()
-			if hasSupplementary {
-				// Use identity mapping for supplementary plane support
-				// PDF spec allows /Identity as a name object instead of a stream
-				// This means CID == GID (identity mapping) for all characters
-				f.out("/Identity")
-			} else {
-				// Use explicit array for BMP-only (backward compatibility)
-				cidToGidMap := make([]byte, 256*256*2)
-				for cc, glyph := range CodeSignDictionary {
-					cidToGidMap[cc*2] = byte(glyph >> 8)
-					cidToGidMap[cc*2+1] = byte(glyph & 0xFF)
+				cidToGidMap := make([]byte, (maxCID+1)*2)
+				for cid := 0; cid <= maxCID; cid++ {
+					glyph := cidGlyphMap[cid]
+					cidToGidMap[cid*2] = byte(glyph >> 8)
+					cidToGidMap[cid*2+1] = byte(glyph & 0xFF)
 				}
 				cidToGidMap = sliceCompress(cidToGidMap)
 				f.out("<</Length " + strconv.Itoa(len(cidToGidMap)) + "/Filter /FlateDecode>>")
 				f.putstream(cidToGidMap)
-			}
-			f.out("endobj")
-
+				f.out("endobj")
 
 				//Font file
 				f.newobj()
@@ -4315,7 +4347,7 @@ func (f *Fpdf) putfonts() {
 	return
 }
 
-func (f *Fpdf) generateCIDFontMap(font *fontDefType, LastRune int) {
+func (f *Fpdf) generateCIDFontMap(font *fontDefType, maxCID int) {
 	rangeID := 0
 	cidArray := make(map[int]*untypedKeyMap)
 	cidArrayKeys := make([]int, 0)
@@ -4323,19 +4355,20 @@ func (f *Fpdf) generateCIDFontMap(font *fontDefType, LastRune int) {
 	prevWidth := -1
 	interval := false
 	startCid := 1
-	cwLen := LastRune + 1
+	cwLen := maxCID + 1
 
 	// for each character
 	for cid := startCid; cid < cwLen; cid++ {
-		width, ok := font.Cw[cid]
+		runeValue, okRune := font.usedRunes[cid]
+		if !okRune {
+			continue
+		}
+		width, ok := font.Cw[runeValue]
 		if !ok || width == 0x00 {
 			continue
 		}
 		if width == 65535 {
 			width = 0
-		}
-		if numb, OK := font.usedRunes[cid]; cid > 255 && (!OK || numb == 0) {
-			continue
 		}
 
 		if cid == prevCid+1 {
