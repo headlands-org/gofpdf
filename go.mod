@@ -1,4 +1,4 @@
-module github.com/phpdave11/gofpdf
+module github.com/headlands-org/gofpdf
 
 go 1.12
 
