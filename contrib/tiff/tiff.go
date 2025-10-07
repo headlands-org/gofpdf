@@ -26,7 +26,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/phpdave11/gofpdf"
+	"github.com/headlands-org/gofpdf"
 	"golang.org/x/image/tiff"
 )
 

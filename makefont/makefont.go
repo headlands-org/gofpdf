@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/phpdave11/gofpdf"
+	"github.com/headlands-org/gofpdf"
 	"os"
 )
 
